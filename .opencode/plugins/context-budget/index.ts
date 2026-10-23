@@ -89,7 +89,6 @@ export default Plugin.define({
 
     await ctx.session.hook("context", async (event) => {
       try {
-        trace(ctx.location.directory, "hook")
         const context: any = await ctx.session.context({ sessionID: event.sessionID })
         const messages: any[] = context?.data ?? []
 
