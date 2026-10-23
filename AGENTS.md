@@ -25,6 +25,10 @@ remaining context yourself and do not argue with the number.
 The directive is repeated only when the mode changes. Do not wait for the user
 to remind you: the number is already in the prompt.
 
+At `critical` the plugin can also request compaction on its own
+(`ctx.session.compact`). That is opt-in via `autoCompact` in `opencode.jsonc`
+and off by default: compaction is lossy, a new chat with `/resume` is not.
+
 ## Handoff quality
 
 A new chat starts from `.opencode/handoff/pack.md` — one file with the state
