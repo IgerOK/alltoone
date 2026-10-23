@@ -81,6 +81,13 @@ Rules:
 - Never paste large tool output back into the conversation; write it to a file
   and reference the path.
 
+## Language
+
+Answer in the language of the user's latest message. `/resume` and `/handoff`
+carry no language of their own: continue in the language recorded in the
+state's Decisions (for example `Working language: Russian`), and switch only
+when the user does.
+
 ## Verification
 
 - `python -m unittest discover -s tests` must stay green.

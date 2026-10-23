@@ -11,5 +11,8 @@ Then:
 2. List any file you still need that is not in the pack.
 3. Continue with the next step.
 
+Continue in the working language recorded in the state's Decisions unless the
+user switches.
+
 Do not re-read files that are already in the pack, and do not ask the user to
 repeat decisions that are written in the state section.
