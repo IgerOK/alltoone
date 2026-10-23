@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 
 import { Plugin } from "@opencode/plugin"
@@ -90,7 +90,12 @@ export default Plugin.define({
     // Compaction rewrites history and loses detail, so it is an explicit
     // per-project opt-in: the default exit is a new chat with `/resume`.
     const autoCompact = ctx.options.autoCompact === true
-    trace(ctx.location.directory, `setup autoCompact=${autoCompact}`)
+    // Auto-resume only points at the pack; it never reads it. Off by default:
+    // the pack costs ~30k tokens and only a continuing session should pay.
+    const autoResume = ctx.options.autoResume === true
+    const pack = join(ctx.location.directory, ".opencode", "handoff", "pack.md")
+    const resumed = new Set<string>()
+    trace(ctx.location.directory, `setup autoCompact=${autoCompact} autoResume=${autoResume}`)
 
     await ctx.session.hook("context", async (event) => {
       try {
@@ -161,7 +166,18 @@ export default Plugin.define({
           // directive was handed to the model and how fast the window filled.
           trace(ctx.location.directory, `mode ${previous} -> ${mode} (${Math.round(ratio * 100)}%)`)
         }
-        const text = line + (changed ? directive(mode, autoCompact) : "")
+        // A fresh chat starts blind. One pointer on the first request is
+        // cheaper than making the user retype `/resume`, and it repeats only
+        // once per session so the pack never displaces real context.
+        let resume = ""
+        if (autoResume && !resumed.has(event.sessionID) && existsSync(pack)) {
+          resumed.add(event.sessionID)
+          resume =
+            "\nA handoff pack is ready at `.opencode/handoff/pack.md`: read it first " +
+            "when work continues from a previous session."
+          trace(ctx.location.directory, `resume pointer ${event.sessionID}`)
+        }
+        const text = line + (changed ? directive(mode, autoCompact) : "") + resume
         // A trailing message leaves the system prompt byte-identical between
         // requests, which is what prompt caching keys on: injecting into
         // `event.system` dropped the cache hit rate from ~97% to ~2%

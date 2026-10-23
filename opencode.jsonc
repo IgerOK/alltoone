@@ -16,12 +16,15 @@
   // Context meter. Options reach the plugin only through this entry; the
   // `.opencode/plugins/` discovery and this path resolve to one instance.
   // `autoCompact` stays off: compaction is lossy, a new chat with /resume is
-  // the intended exit.
+  // the intended exit. `autoResume` is off too: it would add a pointer to
+  // `pack.md` on the first request of every session, and the pack costs ~30k
+  // tokens.
   "plugins": [
     {
       "package": "./.opencode/plugins/context-budget",
       "options": {
         "autoCompact": false,
+        "autoResume": false,
       },
     },
   ],

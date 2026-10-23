@@ -7,7 +7,7 @@
 //
 // Usage: node tests/plugin_budget_test.mjs [path/to/index.ts]
 
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -36,10 +36,15 @@ function check(name, actual, expected) {
 }
 
 /** A plugin context that reports fixed provider usage and records compaction. */
-function makeContext(autoCompact) {
+function makeContext(options, withPack = false) {
   const state = { hook: null, compactions: [], used: 0 }
+  const opts = typeof options === "boolean" ? { autoCompact: options } : (options ?? {})
+  if (withPack) {
+    mkdirSync(join(work, ".opencode", "handoff"), { recursive: true })
+    writeFileSync(join(work, ".opencode", "handoff", "pack.md"), "# Handoff state: test\n")
+  }
   const ctx = {
-    options: { autoCompact },
+    options: opts,
     location: { directory: work },
     model: {
       list: async () => ({
@@ -63,8 +68,8 @@ function makeContext(autoCompact) {
 }
 
 /** Run the hook once per usage value, as if the window grew between requests. */
-async function run(autoCompact, usage, sessionID) {
-  const { ctx, state } = makeContext(autoCompact)
+async function run(options, usage, sessionID, withPack = false) {
+  const { ctx, state } = makeContext(options, withPack)
   state.tails = []
   state.systemSizes = []
   await plugin.setup(ctx)
@@ -125,10 +130,46 @@ check(
   [true, true],
 )
 
+// autoResume: a pointer to the pack, once per session, only when the pack exists.
+const resumeOff = await run({ autoCompact: false, autoResume: false }, [NORMAL_USED], "ses_resume_off")
+check("autoResume=false adds no pointer", resumeOff.tails[0].includes("handoff pack"), false)
+
+const resumeMissing = await run(
+  { autoCompact: false, autoResume: true },
+  [NORMAL_USED],
+  "ses_resume_missing",
+)
+check(
+  "autoResume is silent without pack.md",
+  resumeMissing.tails[0].includes(".opencode/handoff/pack.md"),
+  false,
+)
+
+const resumeOn = await run(
+  { autoCompact: false, autoResume: true },
+  [NORMAL_USED, NORMAL_USED],
+  "ses_resume_on",
+  true,
+)
+check(
+  "autoResume points at the pack on the first request",
+  resumeOn.tails[0].includes(".opencode/handoff/pack.md"),
+  true,
+)
+check(
+  "autoResume stays quiet after the first request",
+  resumeOn.tails[1].includes(".opencode/handoff/pack.md"),
+  false,
+)
+check("the pointer rides with the meter line", resumeOn.tails[0].includes("[budget]"), true)
+check("system prompt stays untouched with autoResume", resumeOn.systemSizes, [0, 0])
+
 const log = readFileSync(join(work, ".opencode", "handoff", "budget.log"), "utf8")
 check("trace records the request", log.includes("compact requested ses_critical_on"), true)
 check("trace records autoCompact=false", log.includes("setup autoCompact=false"), true)
 check("trace records the mode transition", log.includes("mode normal -> critical"), true)
+check("trace records the resume pointer", log.includes("resume pointer ses_resume_on"), true)
+check("trace records autoResume=true", log.includes("setup autoCompact=false autoResume=true"), true)
 
 if (failures.length > 0) {
   console.error(`\n${failures.length} failing check(s)`)

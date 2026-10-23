@@ -29,6 +29,11 @@ At `critical` the plugin can also request compaction on its own
 (`ctx.session.compact`). That is opt-in via `autoCompact` in `opencode.jsonc`
 and off by default: compaction is lossy, a new chat with `/resume` is not.
 
+`autoResume` (also off by default) appends one pointer to
+`.opencode/handoff/pack.md` on the first request of a session, so a new chat
+finds the pack without the user typing `/resume`. It is a pointer, not a read:
+the pack is ~30k tokens and only a continuing session should pay for it.
+
 ## Handoff quality
 
 A new chat starts from `.opencode/handoff/pack.md` — one file with the state
