@@ -16,6 +16,7 @@ from . import __version__
 from .collector import collect
 from .render import Meta, build_tree, render, split_entries
 from .tokens import estimate_tokens, human_bytes, human_tokens
+from .unpack import UnpackError, unpack
 
 CONFIG_NAME = "alltoone.json"
 
@@ -40,6 +41,7 @@ examples:
   alltoone -f xml --max-tokens 100000 -o ctx.xml
   alltoone --include "src/**" --include "*.md"
   alltoone --clipboard              copy the result to the clipboard
+  alltoone unpack context.md -o app restore a project from a context file
 """
 
 
@@ -206,6 +208,69 @@ def _print_summary(collection, outputs: list[Path]) -> None:
         print(f"  output   {path}", file=sys.stderr)
 
 
+def build_unpack_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="alltoone unpack",
+        description="Restore a project tree from a context file produced by alltoone.",
+    )
+    parser.add_argument("context", help="context file (markdown, xml or plain)")
+    parser.add_argument(
+        "-o",
+        "--output",
+        metavar="DIR",
+        help="destination directory (default: ./<context file stem>)",
+    )
+    parser.add_argument(
+        "-f", "--format", choices=("markdown", "xml", "plain"), help="force the format instead of detecting it"
+    )
+    parser.add_argument("--force", action="store_true", help="overwrite files that already exist")
+    parser.add_argument("--dry-run", action="store_true", help="show what would be written, write nothing")
+    parser.add_argument("-q", "--quiet", action="store_true", help="do not print the summary")
+    return parser
+
+
+def unpack_main(argv: list[str]) -> int:
+    args = build_unpack_parser().parse_args(argv)
+
+    source = Path(args.context).expanduser()
+    if not source.is_file():
+        print(f"error: context file not found: {source}", file=sys.stderr)
+        return 2
+
+    dest = Path(args.output).expanduser() if args.output else Path(source.stem)
+    try:
+        text = source.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"error: cannot read {source}: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        result = unpack(
+            text,
+            dest,
+            fmt=args.format,
+            filename=source.name,
+            overwrite=args.force,
+            dry_run=args.dry_run,
+        )
+    except UnpackError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if not args.quiet:
+        print(f"alltoone {__version__}", file=sys.stderr)
+        print(f"  format   {result.fmt}", file=sys.stderr)
+        print(f"  dest     {dest.resolve()}", file=sys.stderr)
+        action = "would write" if args.dry_run else "written"
+        print(f"  {action:<9}{len(result.written)} files", file=sys.stderr)
+        if result.skipped:
+            print(
+                f"  skipped  {len(result.skipped)} existing (use --force to overwrite)",
+                file=sys.stderr,
+            )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         try:
@@ -213,8 +278,12 @@ def main(argv: list[str] | None = None) -> int:
         except (ValueError, OSError):
             pass
 
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] in ("unpack", "u"):
+        return unpack_main(raw[1:])
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw)
 
     root = Path(args.path).expanduser()
     if not root.exists():

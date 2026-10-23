@@ -10,6 +10,7 @@ dist/
 # alltoone output
 alltoone-context*
 parts/
+demo/
 *.part1.md
 
 # OS / editors

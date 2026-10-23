@@ -119,11 +119,15 @@ def build_tree(paths: Iterable[str], root_name: str) -> str:
 
 
 def _code_fence(text: str, language: str) -> str:
-    """Wrap text in a fence that cannot be broken by backticks inside it."""
+    """Wrap text in a fence that cannot be broken by backticks inside it.
+
+    Content is written verbatim: the newline before the closing fence is added
+    by this function and removed again by the unpacker, so trailing newlines of
+    the original file survive a pack/unpack round trip.
+    """
     longest = max((len(match) for match in re.findall(r"`+", text)), default=0)
     ticks = "`" * max(3, longest + 1)
-    body = text.rstrip("\n")
-    return f"{ticks}{language}\n{body}\n{ticks}"
+    return f"{ticks}{language}\n{text}\n{ticks}"
 
 
 def _cdata(text: str) -> str:
@@ -228,7 +232,7 @@ def _plain(
         out.extend(["STRUCTURE:", tree, ""])
     if show_files:
         for entry in entries:
-            out.extend([rule, f"FILE: {entry.rel}", thin, entry.text.rstrip("\n"), ""])
+            out.extend([rule, f"FILE: {entry.rel}", thin, entry.text])
     return "\n".join(out) + "\n"
 
 

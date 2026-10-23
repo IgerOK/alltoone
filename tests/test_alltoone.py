@@ -12,6 +12,7 @@ from alltoone.collector import FileEntry, collect, decode_text, looks_binary
 from alltoone.ignore import IgnoreMatcher, compile_globs, compile_pattern
 from alltoone.render import Meta, build_tree, language_for, render, split_entries
 from alltoone.tokens import estimate_tokens, human_bytes, human_tokens
+from alltoone.unpack import UnpackError, detect_format, parse, safe_target, unpack
 
 
 class PatternTests(unittest.TestCase):
@@ -232,6 +233,119 @@ class CliTests(unittest.TestCase):
         with contextlib.redirect_stderr(stderr):
             code = main(["definitely/not/here"])
         self.assertEqual(code, 2)
+
+
+class UnpackTests(unittest.TestCase):
+    SAMPLES = {
+        "a.py": "print('a')\n",
+        "empty.txt": "",
+        "no_newline.txt": "abc",
+        "trailing.txt": "a\n\n\n",
+        "backticks.md": "```js\ncode\n```\n### `fake.py`\n",
+        "nested/deep/x.txt": "x\n",
+        "cyrillic.txt": "привет\n",
+    }
+
+    def _make_project(self, base: Path) -> Path:
+        root = base / "project"
+        for rel, content in self.SAMPLES.items():
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8", newline="")
+        return root
+
+    def _assert_restored(self, dest: Path) -> None:
+        for rel, content in self.SAMPLES.items():
+            restored = (dest / rel).read_text(encoding="utf-8")
+            self.assertEqual(restored, content, f"mismatch in {rel}")
+
+    def test_round_trip_markdown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = self._make_project(base)
+            context = base / "ctx.md"
+            self.assertEqual(main([str(root), "-o", str(context), "-q"]), 0)
+            dest = base / "restored"
+            unpack(context.read_text(encoding="utf-8"), dest)
+            self._assert_restored(dest)
+
+    def test_round_trip_xml(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = self._make_project(base)
+            context = base / "ctx.xml"
+            self.assertEqual(main([str(root), "-f", "xml", "-o", str(context), "-q"]), 0)
+            dest = base / "restored"
+            unpack(context.read_text(encoding="utf-8"), dest)
+            self._assert_restored(dest)
+
+    def test_round_trip_plain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = self._make_project(base)
+            context = base / "ctx.txt"
+            self.assertEqual(main([str(root), "-f", "plain", "-o", str(context), "-q"]), 0)
+            dest = base / "restored"
+            unpack(context.read_text(encoding="utf-8"), dest)
+            self._assert_restored(dest)
+
+    def test_format_detection(self):
+        self.assertEqual(detect_format("<?xml version='1.0'?><context/>", "x"), "xml")
+        self.assertEqual(detect_format("# Project context: demo", "x"), "markdown")
+        self.assertEqual(detect_format("PROJECT: demo", "x"), "plain")
+        with self.assertRaises(UnpackError):
+            detect_format("just some text", "x")
+
+    def test_rejects_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for bad in ("../evil.txt", "/etc/passwd", "C:/Windows/evil.txt", "a/../../evil.txt"):
+                with self.assertRaises(UnpackError, msg=bad):
+                    safe_target(root, bad)
+
+    def test_does_not_overwrite_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            document = "# Project context: demo\n\n### `a.txt`\n\n```text\nnew\n```\n"
+            (dest / "a.txt").write_text("old\n", encoding="utf-8")
+            result = unpack(document, dest)
+            self.assertEqual(result.skipped, ["a.txt"])
+            self.assertEqual((dest / "a.txt").read_text(encoding="utf-8"), "old\n")
+
+            result = unpack(document, dest, overwrite=True)
+            self.assertEqual(result.written, ["a.txt"])
+            self.assertEqual((dest / "a.txt").read_text(encoding="utf-8"), "new")
+
+    def test_dry_run_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            document = "# Project context: demo\n\n### `a/b.txt`\n\n```text\nhi\n```\n"
+            result = unpack(document, dest, dry_run=True)
+            self.assertEqual(result.written, ["a/b.txt"])
+            self.assertFalse((dest / "a" / "b.txt").exists())
+
+    def test_rejects_duplicate_paths(self):
+        document = (
+            "# Project context: demo\n\n### `a.txt`\n\n```text\n1\n```\n\n"
+            "### `a.txt`\n\n```text\n2\n```\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(UnpackError):
+                unpack(document, Path(tmp))
+
+    def test_empty_context_is_rejected(self):
+        with self.assertRaises(UnpackError):
+            unpack("# Project context: demo\n", Path(tempfile.gettempdir()))
+
+    def test_cli_unpack(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            root = self._make_project(base)
+            context = base / "ctx.md"
+            self.assertEqual(main([str(root), "-o", str(context), "-q"]), 0)
+            dest = base / "restored"
+            self.assertEqual(main(["unpack", str(context), "-o", str(dest), "-q"]), 0)
+            self._assert_restored(dest)
 
 
 if __name__ == "__main__":
