@@ -171,6 +171,12 @@ check("trace records the mode transition", log.includes("mode normal -> critical
 check("trace records the resume pointer", log.includes("resume pointer ses_resume_on"), true)
 check("trace records autoResume=true", log.includes("setup autoCompact=false autoResume=true"), true)
 
+// The shipped config is what the installer copies, and the options only work
+// through that entry: a mismatch between docs and config is a real bug.
+const shipped = readFileSync(join(here, "..", "opencode.jsonc"), "utf8")
+check("shipped config enables autoResume", /"autoResume"\s*:\s*true/.test(shipped), true)
+check("shipped config keeps autoCompact off", /"autoCompact"\s*:\s*false/.test(shipped), true)
+
 if (failures.length > 0) {
   console.error(`\n${failures.length} failing check(s)`)
   for (const failure of failures) console.error(`- ${failure}`)
