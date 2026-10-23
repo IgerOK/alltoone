@@ -3,6 +3,8 @@ from __future__ import annotations
 import contextlib
 import io
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -408,6 +410,28 @@ class HandoffTests(unittest.TestCase):
                 code = main(["handoff", str(root), "--files-from", str(wanted)])
             self.assertEqual(code, 2)
             self.assertIn("file list is empty", stderr.getvalue())
+
+
+class PluginBudgetTests(unittest.TestCase):
+    """The context-budget plugin is TypeScript; node drives its branches.
+
+    Skipped when node is absent: the package has no runtime dependencies and the
+    suite must stay runnable with plain Python.
+    """
+
+    def test_compaction_is_opt_in_and_once_per_session(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("node is not installed")
+        script = Path(__file__).with_name("plugin_budget_test.mjs")
+        source = Path(__file__).parents[1] / ".opencode" / "plugins" / "context-budget" / "index.ts"
+        result = subprocess.run(
+            [node, str(script), str(source)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
 
 
 class UnpackTests(unittest.TestCase):
