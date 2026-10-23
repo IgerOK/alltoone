@@ -150,11 +150,16 @@ export default Plugin.define({
           }
         }
 
-        const changed = lastMode.get(event.sessionID) !== mode
+        const previous = lastMode.get(event.sessionID)
+        const changed = previous !== mode
         lastMode.set(event.sessionID, mode)
         if (!reported.has(event.sessionID)) {
           reported.add(event.sessionID)
           trace(ctx.location.directory, line)
+        } else if (changed) {
+          // Transitions are the interesting part of the log: they show when a
+          // directive was handed to the model and how fast the window filled.
+          trace(ctx.location.directory, `mode ${previous} -> ${mode} (${Math.round(ratio * 100)}%)`)
         }
         const text = line + (changed ? directive(mode, autoCompact) : "")
         // A trailing message leaves the system prompt byte-identical between

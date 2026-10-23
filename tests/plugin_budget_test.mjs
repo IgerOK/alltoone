@@ -2,8 +2,8 @@
 //
 // The plugin imports `@opencode/plugin`, which only exists inside OpenCode, so
 // the source is copied with that single import replaced by a stub. Everything
-// else — thresholds, the usage calculation, the compaction guard — is the code
-// that actually runs in a session.
+// else — thresholds, the usage calculation, the compaction guard, the place the
+// line is injected — is the code that actually runs in a session.
 //
 // Usage: node tests/plugin_budget_test.mjs [path/to/index.ts]
 
@@ -36,8 +36,8 @@ function check(name, actual, expected) {
 }
 
 /** A plugin context that reports fixed provider usage and records compaction. */
-function makeContext(autoCompact, usedTokens) {
-  const state = { hook: null, compactions: [] }
+function makeContext(autoCompact) {
+  const state = { hook: null, compactions: [], used: 0 }
   const ctx = {
     options: { autoCompact },
     location: { directory: work },
@@ -51,7 +51,7 @@ function makeContext(autoCompact, usedTokens) {
         if (name === "context") state.hook = callback
       },
       context: async () => ({
-        data: [{ type: "assistant", tokens: { input: usedTokens, output: 100 } }],
+        data: [{ type: "assistant", tokens: { input: state.used, output: 100 } }],
       }),
       compact: async ({ sessionID }) => {
         state.compactions.push(sessionID)
@@ -62,13 +62,15 @@ function makeContext(autoCompact, usedTokens) {
   return { ctx, state }
 }
 
-async function run(autoCompact, usedTokens, sessionID, calls) {
-  const { ctx, state } = makeContext(autoCompact, usedTokens)
+/** Run the hook once per usage value, as if the window grew between requests. */
+async function run(autoCompact, usage, sessionID) {
+  const { ctx, state } = makeContext(autoCompact)
   state.tails = []
   state.systemSizes = []
   await plugin.setup(ctx)
   if (!state.hook) throw new Error("the context hook was not registered")
-  for (let index = 0; index < calls; index++) {
+  for (const tokens of usage) {
+    state.used = tokens
     const event = {
       sessionID,
       model: { providerID: "test", id: "model" },
@@ -87,7 +89,7 @@ async function run(autoCompact, usedTokens, sessionID, calls) {
 const CRITICAL_USED = 190_000
 const NORMAL_USED = 10_000
 
-const criticalOn = await run(true, CRITICAL_USED, "ses_critical_on", 3)
+const criticalOn = await run(true, [CRITICAL_USED, CRITICAL_USED, CRITICAL_USED], "ses_critical_on")
 check("autoCompact=true requests compaction", criticalOn.compactions.length, 1)
 check("autoCompact=true keeps one request per session", criticalOn.compactions[0], "ses_critical_on")
 check(
@@ -98,7 +100,7 @@ check(
 check("meter travels in a trailing message", criticalOn.tails[0].includes("mode=critical"), true)
 check("system prompt stays untouched", criticalOn.systemSizes, [0, 0, 0])
 
-const criticalOff = await run(false, CRITICAL_USED, "ses_critical_off", 2)
+const criticalOff = await run(false, [CRITICAL_USED, CRITICAL_USED], "ses_critical_off")
 check("autoCompact=false never compacts", criticalOff.compactions.length, 0)
 check(
   "directive stays plain when off",
@@ -106,14 +108,27 @@ check(
   false,
 )
 
-const belowThreshold = await run(true, NORMAL_USED, "ses_normal", 2)
+const belowThreshold = await run(true, [NORMAL_USED, NORMAL_USED], "ses_normal")
 check("no compaction below the threshold", belowThreshold.compactions.length, 0)
 check("meter reports normal", belowThreshold.tails[0].includes("mode=normal"), true)
 check("system prompt stays untouched below the threshold", belowThreshold.systemSizes, [0, 0])
 
+const transition = await run(
+  true,
+  [NORMAL_USED, CRITICAL_USED, CRITICAL_USED],
+  "ses_transition",
+)
+check("compaction waits for the threshold", transition.compactions.length, 1)
+check(
+  "mode change reaches the model",
+  [transition.tails[0].includes("mode=normal"), transition.tails[1].includes("mode=critical")],
+  [true, true],
+)
+
 const log = readFileSync(join(work, ".opencode", "handoff", "budget.log"), "utf8")
 check("trace records the request", log.includes("compact requested ses_critical_on"), true)
 check("trace records autoCompact=false", log.includes("setup autoCompact=false"), true)
+check("trace records the mode transition", log.includes("mode normal -> critical"), true)
 
 if (failures.length > 0) {
   console.error(`\n${failures.length} failing check(s)`)
