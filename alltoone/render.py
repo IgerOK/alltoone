@@ -10,6 +10,7 @@ from xml.sax.saxutils import escape as xml_escape, quoteattr
 
 from . import __version__
 from .collector import FileEntry
+from .integrity import build_manifest, manifest_total
 from .tokens import human_bytes, human_tokens
 
 LANGUAGES: dict[str, str] = {
@@ -159,6 +160,7 @@ def _markdown(
     meta: Meta,
     show_tree: bool = True,
     show_files: bool = True,
+    show_integrity: bool = True,
 ) -> str:
     out: list[str] = [
         f"# Project context: {meta.root_name}",
@@ -170,6 +172,9 @@ def _markdown(
     ]
     if show_tree:
         out.extend(["## Project structure", "", "```text", tree, "```", ""])
+    if show_files and show_integrity:
+        manifest, _ = build_manifest(entries)
+        out.extend(["## Integrity", "", "```text", *manifest, "```", ""])
     if show_files:
         out.extend(["## Files", ""])
         for entry in entries:
@@ -186,6 +191,7 @@ def _xml(
     meta: Meta,
     show_tree: bool = True,
     show_files: bool = True,
+    show_integrity: bool = True,
 ) -> str:
     out: list[str] = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -199,11 +205,19 @@ def _xml(
     ]
     if show_tree:
         out.append(f"  <structure>{_cdata(tree)}</structure>")
+    digests: dict[str, str] = {}
+    if show_files and show_integrity:
+        _, digests = build_manifest(entries)
+        out.append('  <integrity algorithm="sha256">')
+        out.append(f'    <total hash="{manifest_total(digests)}"/>')
+        out.append("  </integrity>")
     if show_files:
         out.append("  <files>")
         for entry in entries:
+            digest = digests.get(entry.rel)
+            attribute = f' sha256="{digest}"' if digest else ""
             out.append(
-                f'    <file path={quoteattr(entry.rel)} tokens="{entry.tokens}">'
+                f'    <file path={quoteattr(entry.rel)} tokens="{entry.tokens}"{attribute}>'
                 f"{_cdata(entry.text)}</file>"
             )
         out.append("  </files>")
@@ -217,6 +231,7 @@ def _plain(
     meta: Meta,
     show_tree: bool = True,
     show_files: bool = True,
+    show_integrity: bool = True,
 ) -> str:
     rule = "=" * 78
     thin = "-" * 78
@@ -230,6 +245,9 @@ def _plain(
     ]
     if show_tree:
         out.extend(["STRUCTURE:", tree, ""])
+    if show_files and show_integrity:
+        manifest, _ = build_manifest(entries)
+        out.extend(["INTEGRITY (sha256):", rule, *manifest, rule, ""])
     if show_files:
         for entry in entries:
             out.extend([rule, f"FILE: {entry.rel}", thin, entry.text])
@@ -246,6 +264,7 @@ def render(
     fmt: str = "markdown",
     show_tree: bool = True,
     show_files: bool = True,
+    show_integrity: bool = True,
 ) -> str:
     try:
         renderer = RENDERERS[fmt]
@@ -253,7 +272,7 @@ def render(
         raise ValueError(
             f"unknown format {fmt!r}, expected one of: {', '.join(RENDERERS)}"
         ) from None
-    return renderer(entries, tree, meta, show_tree, show_files)
+    return renderer(entries, tree, meta, show_tree, show_files, show_integrity)
 
 
 def split_entries(

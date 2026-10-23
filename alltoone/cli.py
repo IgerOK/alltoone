@@ -31,6 +31,7 @@ DEFAULTS: dict[str, object] = {
     "max_tokens": None,
     "tree": True,
     "files": True,
+    "integrity": True,
     "clipboard": False,
 }
 
@@ -86,6 +87,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--tree-only", action="store_const", const=True, default=None, help="print the file tree only")
     parser.add_argument("--no-tree", action="store_const", const=True, default=None, help="omit the file tree")
+    parser.add_argument(
+        "--no-integrity",
+        action="store_const",
+        const=True,
+        default=None,
+        help="do not add SHA-256 checksums to the output",
+    )
     parser.add_argument("--config", metavar="FILE", help=f"use FILE instead of {CONFIG_NAME}")
     parser.add_argument(
         "--clipboard",
@@ -145,6 +153,8 @@ def resolve_settings(args: argparse.Namespace, config: dict[str, object]) -> dic
         settings["files"] = False
     if args.no_tree:
         settings["tree"] = False
+    if args.no_integrity:
+        settings["integrity"] = False
     if args.clipboard:
         settings["clipboard"] = True
     return settings
@@ -225,6 +235,11 @@ def build_unpack_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--force", action="store_true", help="overwrite files that already exist")
     parser.add_argument("--dry-run", action="store_true", help="show what would be written, write nothing")
+    parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="do not check SHA-256 checksums (needed for contexts without a manifest)",
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="do not print the summary")
     return parser
 
@@ -252,6 +267,7 @@ def unpack_main(argv: list[str]) -> int:
             filename=source.name,
             overwrite=args.force,
             dry_run=args.dry_run,
+            verify_checksums=not args.no_verify,
         )
     except UnpackError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -260,6 +276,10 @@ def unpack_main(argv: list[str]) -> int:
     if not args.quiet:
         print(f"alltoone {__version__}", file=sys.stderr)
         print(f"  format   {result.fmt}", file=sys.stderr)
+        if result.verified:
+            print(f"  checks   {result.checks} files verified (sha256)", file=sys.stderr)
+        elif not args.no_verify:
+            print("  checks   no integrity data in this context", file=sys.stderr)
         print(f"  dest     {dest.resolve()}", file=sys.stderr)
         action = "would write" if args.dry_run else "written"
         print(f"  {action:<9}{len(result.written)} files", file=sys.stderr)
@@ -329,6 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     tree = build_tree([entry.rel for entry in all_entries], root_name) if settings["tree"] else ""
     show_files = bool(settings["files"])
     show_tree = bool(settings["tree"])
+    show_integrity = bool(settings["integrity"])
     entries = all_entries if show_files else []
 
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -349,13 +370,15 @@ def main(argv: list[str] | None = None) -> int:
     max_tokens = settings["max_tokens"]
     chunks: list[list] = [entries]
     if max_tokens and entries:
-        header_tokens = estimate_tokens(render([], tree, make_meta([]), fmt, show_tree, show_files))
+        header_tokens = estimate_tokens(
+            render([], tree, make_meta([]), fmt, show_tree, show_files, show_integrity)
+        )
         chunks = split_entries(entries, int(max_tokens), header_tokens)  # type: ignore[arg-type]
 
     documents: list[str] = []
     for index, chunk in enumerate(chunks, start=1):
         meta = make_meta(chunk, index if len(chunks) > 1 else None, len(chunks) if len(chunks) > 1 else None)
-        documents.append(render(chunk, tree, meta, fmt, show_tree, show_files))
+        documents.append(render(chunk, tree, meta, fmt, show_tree, show_files, show_integrity))
 
     written: list[Path] = []
     if len(documents) == 1:

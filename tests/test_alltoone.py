@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import re
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -346,6 +347,76 @@ class UnpackTests(unittest.TestCase):
             dest = base / "restored"
             self.assertEqual(main(["unpack", str(context), "-o", str(dest), "-q"]), 0)
             self._assert_restored(dest)
+
+
+class IntegrityTests(unittest.TestCase):
+    def _pack(self, base: Path, fmt: str, *extra: str) -> Path:
+        root = base / "project"
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "a.py").write_text("print('a')\n", encoding="utf-8")
+        (root / "b.txt").write_text("bee\n", encoding="utf-8")
+        suffix = "xml" if fmt == "xml" else "md"
+        context = base / f"ctx.{suffix}"
+        main([str(root), "-f", fmt, "-o", str(context), "-q", *extra])
+        return context
+
+    def test_manifest_is_written_in_every_format(self):
+        for fmt in ("markdown", "xml", "plain"):
+            with self.subTest(fmt=fmt), tempfile.TemporaryDirectory() as tmp:
+                context = self._pack(Path(tmp), fmt)
+                text = context.read_text(encoding="utf-8")
+                if fmt == "xml":
+                    self.assertIn('sha256="', text)
+                    self.assertIn("<total hash=", text)
+                else:
+                    self.assertIn("sha256 manifest v1", text)
+                    self.assertRegex(text, r"(?m)^total [0-9a-f]{64}$")
+
+    def test_manifest_can_be_disabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            context = self._pack(Path(tmp), "markdown", "--no-integrity")
+            self.assertNotIn("## Integrity", context.read_text(encoding="utf-8"))
+
+    def test_corrupted_content_is_rejected_before_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            context = self._pack(base, "markdown")
+            text = context.read_text(encoding="utf-8").replace("print('a')", "print('b')")
+            dest = base / "restored"
+            with self.assertRaises(UnpackError) as raised:
+                unpack(text, dest)
+            self.assertIn("checksum mismatch", str(raised.exception))
+            self.assertFalse((dest / "src" / "a.py").exists())
+
+    def test_dropped_manifest_line_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            context = self._pack(base, "markdown")
+            text = context.read_text(encoding="utf-8")
+            damaged = re.sub(r"(?m)^[0-9a-f]{64}  b\.txt$\n", "", text)
+            self.assertNotEqual(text, damaged)
+            with self.assertRaises(UnpackError) as raised:
+                unpack(damaged, base / "restored")
+            message = str(raised.exception)
+            self.assertIn("without a checksum", message)
+            self.assertIn("integrity block itself is damaged", message)
+
+    def test_no_verify_allows_damaged_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            context = self._pack(base, "markdown")
+            text = context.read_text(encoding="utf-8").replace("print('a')", "print('b')")
+            dest = base / "restored"
+            result = unpack(text, dest, verify_checksums=False)
+            self.assertEqual(len(result.written), 2)
+            self.assertIn("print('b')", (dest / "src" / "a.py").read_text(encoding="utf-8"))
+
+    def test_context_without_manifest_still_unpacks(self):
+        document = "# Project context: demo\n\n### `a.txt`\n\n```text\nhi\n```\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            result = unpack(document, Path(tmp))
+            self.assertFalse(result.verified)
+            self.assertEqual(result.written, ["a.txt"])
 
 
 if __name__ == "__main__":
