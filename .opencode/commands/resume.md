@@ -1,0 +1,15 @@
+---
+description: Restore work from the handoff pack in a new chat
+---
+
+Read `.opencode/handoff/pack.md`. It contains the previous session's state
+first, then the project tree and the packed files.
+
+Then:
+
+1. Restate the goal, what is done, and the next step in at most 10 lines.
+2. List any file you still need that is not in the pack.
+3. Continue with the next step.
+
+Do not re-read files that are already in the pack, and do not ask the user to
+repeat decisions that are written in the state section.

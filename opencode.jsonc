@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Keep more exact recent context than the 15k default: compaction is lossy,
+  // and the handoff protocol only helps if the tail is still readable.
+  "compaction": {
+    "auto": true,
+    "keep": {
+      "tokens": 30000,
+    },
+    "buffer": 20000,
+  },
+  // Write the summary ahead of time instead of pausing the session.
+  "experimental": {
+    "background_compaction": true,
+  },
+}

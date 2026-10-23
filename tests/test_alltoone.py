@@ -346,6 +346,70 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 2)
 
 
+class HandoffTests(unittest.TestCase):
+    def test_state_comes_first_and_only_listed_files_are_packed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("print('a')\n", encoding="utf-8")
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+            state = root / "STATE.md"
+            state.write_text("# State\n\nnext: read b.py\n", encoding="utf-8")
+            wanted = root / "files.txt"
+            wanted.write_text("b.py\n", encoding="utf-8")
+            output = root / "pack.md"
+
+            code = main(
+                [
+                    "handoff",
+                    str(root),
+                    "--state",
+                    str(state),
+                    "--files-from",
+                    str(wanted),
+                    "-o",
+                    str(output),
+                    "-q",
+                ]
+            )
+            self.assertEqual(code, 0)
+
+            text = output.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("# Handoff state:"))
+            self.assertLess(text.index("next: read b.py"), text.index("# Project context:"))
+            self.assertIn("print('b')", text)
+            self.assertNotIn("print('a')", text)
+            # The map still covers the whole project, not only the packed files.
+            self.assertIn("a.py", text)
+
+    def test_unknown_path_is_skipped_with_a_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("print('a')\n", encoding="utf-8")
+            wanted = root / "files.txt"
+            wanted.write_text("a.py\nmissing.py\n", encoding="utf-8")
+            output = root / "pack.md"
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main(["handoff", str(root), "--files-from", str(wanted), "-o", str(output), "-q"])
+            self.assertEqual(code, 0)
+            self.assertIn("missing.py", stderr.getvalue())
+            self.assertIn("print('a')", output.read_text(encoding="utf-8"))
+
+    def test_empty_list_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("print('a')\n", encoding="utf-8")
+            wanted = root / "files.txt"
+            wanted.write_text("# nothing here\n", encoding="utf-8")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main(["handoff", str(root), "--files-from", str(wanted)])
+            self.assertEqual(code, 2)
+            self.assertIn("file list is empty", stderr.getvalue())
+
+
 class UnpackTests(unittest.TestCase):
     SAMPLES = {
         "a.py": "print('a')\n",

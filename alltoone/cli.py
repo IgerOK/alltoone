@@ -14,6 +14,8 @@ from pathlib import Path
 
 from . import __version__
 from .collector import collect
+from .handoff import handoff_main
+from .picker import select_files
 from .render import Meta, build_tree, render, split_entries
 from .tokens import estimate_tokens, human_bytes, human_tokens
 from .unpack import UnpackError, unpack
@@ -45,6 +47,7 @@ examples:
   alltoone --include "src/**" --include "*.md"
   alltoone --clipboard              copy the result to the clipboard
   alltoone unpack context.md -o app restore a project from a context file
+  alltoone handoff                  state + map + files for a new chat
 """
 
 
@@ -68,6 +71,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="GLOB",
         help="skip matching files or whole directories (repeatable)",
+    )
+    parser.add_argument(
+        "--files-from",
+        metavar="FILE",
+        help="pack only the paths listed in FILE, one relative path per line",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="print candidates as 'tokens<TAB>size<TAB>path' and exit (used by the GUI)",
     )
     parser.add_argument(
         "--exclude-from",
@@ -97,6 +110,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         metavar="N",
         help="split the result into parts of at most N estimated tokens",
+    )
+    parser.add_argument(
+        "-i",
+        "--pick",
+        action="store_true",
+        help="choose files interactively from a numbered tree before packing",
     )
     parser.add_argument("--tree-only", action="store_const", const=True, default=None, help="print the file tree only")
     parser.add_argument("--no-tree", action="store_const", const=True, default=None, help="omit the file tree")
@@ -328,6 +347,8 @@ def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     if raw and raw[0] in ("unpack", "u"):
         return unpack_main(raw[1:])
+    if raw and raw[0] == "handoff":
+        return handoff_main(raw[1:])
 
     parser = build_parser()
     args = parser.parse_args(raw)
@@ -383,7 +404,40 @@ def main(argv: list[str] | None = None) -> int:
         skip_paths=skip_paths,
     )
 
+    if args.files_from:
+        wanted_path = Path(args.files_from).expanduser()
+        if not wanted_path.is_file():
+            print(f"error: file list not found: {wanted_path}", file=sys.stderr)
+            return 2
+        try:
+            wanted = {
+                line.strip().replace("\\", "/")
+                for line in wanted_path.read_text(encoding="utf-8-sig").splitlines()
+                if line.strip()
+            }
+        except OSError as exc:
+            print(f"error: cannot read {wanted_path}: {exc}", file=sys.stderr)
+            return 2
+        collection.entries = [entry for entry in collection.entries if entry.rel in wanted]
+
     root_name = root.name if root.is_dir() else root.parent.name
+
+    if args.pick:
+        try:
+            chosen = select_files(collection.entries, root_name)
+        except ValueError:
+            print("error: nothing to select", file=sys.stderr)
+            return 2
+        if chosen is None:
+            print("cancelled", file=sys.stderr)
+            return 130
+        collection.entries = chosen
+
+    if args.list:
+        for entry in collection.entries:
+            sys.stdout.write(f"{entry.tokens}\t{entry.size}\t{entry.rel}\n")
+        return 0
+
     all_entries = collection.entries
     tree = build_tree([entry.rel for entry in all_entries], root_name) if settings["tree"] else ""
     show_files = bool(settings["files"])
