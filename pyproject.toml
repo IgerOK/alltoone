@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alltoone"
+version = "0.1.0"
+description = "Pack every text file of a project into one context file for AI agents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Igor" }]
+keywords = ["llm", "context", "ai", "prompt", "cli", "repomix"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Topic :: Software Development :: Documentation",
+]
+
+[project.scripts]
+alltoone = "alltoone.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["alltoone*"]

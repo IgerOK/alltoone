@@ -1,0 +1,238 @@
+from __future__ import annotations
+
+import contextlib
+import io
+import tempfile
+import unittest
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+from alltoone.cli import main
+from alltoone.collector import FileEntry, collect, decode_text, looks_binary
+from alltoone.ignore import IgnoreMatcher, compile_globs, compile_pattern
+from alltoone.render import Meta, build_tree, language_for, render, split_entries
+from alltoone.tokens import estimate_tokens, human_bytes, human_tokens
+
+
+class PatternTests(unittest.TestCase):
+    def test_basename_pattern_matches_at_any_depth(self):
+        pattern = compile_pattern("*.py")
+        assert pattern is not None
+        self.assertTrue(pattern.matches("main.py"))
+        self.assertTrue(pattern.matches("src/deep/main.py"))
+        self.assertFalse(pattern.matches("src/main.txt"))
+
+    def test_anchored_pattern(self):
+        pattern = compile_pattern("/build")
+        assert pattern is not None
+        self.assertTrue(pattern.matches("build"))
+        self.assertFalse(pattern.matches("src/build"))
+
+    def test_directory_only_pattern(self):
+        pattern = compile_pattern("build/")
+        assert pattern is not None
+        self.assertTrue(pattern.matches("build", is_dir=True))
+        self.assertFalse(pattern.matches("build", is_dir=False))
+        self.assertTrue(pattern.matches("src/build", is_dir=True))
+
+    def test_double_star(self):
+        pattern = compile_pattern("docs/**/*.md")
+        assert pattern is not None
+        self.assertTrue(pattern.matches("docs/a.md"))
+        self.assertTrue(pattern.matches("docs/x/y/a.md"))
+        self.assertFalse(pattern.matches("docs/a.txt"))
+
+    def test_character_class_and_question_mark(self):
+        pattern = compile_pattern("file[0-9]?.txt")
+        assert pattern is not None
+        self.assertTrue(pattern.matches("file1a.txt"))
+        self.assertFalse(pattern.matches("filexa.txt"))
+
+    def test_comment_and_blank_lines_are_skipped(self):
+        self.assertIsNone(compile_pattern("# comment"))
+        self.assertIsNone(compile_pattern("   "))
+
+    def test_negation(self):
+        matcher = IgnoreMatcher(["*.log", "!keep.log"])
+        self.assertTrue(matcher.match("debug.log"))
+        self.assertFalse(matcher.match("keep.log"))
+
+    def test_nested_rules_apply_only_in_subtree(self):
+        matcher = IgnoreMatcher(["*.tmp"])
+        matcher.add_lines(["*.bak"], base="src")
+        self.assertTrue(matcher.match("a.tmp"))
+        self.assertTrue(matcher.match("src/a.bak"))
+        self.assertFalse(matcher.match("a.bak"))
+
+    def test_exclude_globs(self):
+        globs = compile_globs(["*.md", "tests/**"])
+        self.assertTrue(any(p.matches("README.md") for p in globs))
+        self.assertTrue(any(p.matches("tests/test_x.py") for p in globs))
+        self.assertFalse(any(p.matches("main.py") for p in globs))
+
+
+class DecodeTests(unittest.TestCase):
+    def test_utf8(self):
+        text, encoding = decode_text("привет".encode("utf-8"))
+        self.assertEqual((text, encoding), ("привет", "utf-8"))
+
+    def test_utf8_bom(self):
+        text, encoding = decode_text(b"\xef\xbb\xbfhello")
+        self.assertEqual((text, encoding), ("hello", "utf-8-sig"))
+
+    def test_cp1251(self):
+        text, encoding = decode_text("привет".encode("cp1251"))
+        self.assertEqual(text, "привет")
+        self.assertEqual(encoding, "cp1251")
+
+    def test_binary_detection(self):
+        self.assertTrue(looks_binary(b"\x89PNG\r\n\x1a\n\x00\x00"))
+        self.assertFalse(looks_binary(b"print('hello')\n"))
+
+
+class RenderTests(unittest.TestCase):
+    def test_tree_orders_directories_first(self):
+        tree = build_tree(["b.txt", "src/a.py", "src/lib/c.py"], "demo")
+        self.assertEqual(
+            tree.splitlines(),
+            [
+                "demo/",
+                "├── src/",
+                "│   ├── lib/",
+                "│   │   └── c.py",
+                "│   └── a.py",
+                "└── b.txt",
+            ],
+        )
+
+    def test_language_detection(self):
+        self.assertEqual(language_for("src/main.py"), "python")
+        self.assertEqual(language_for("Dockerfile"), "dockerfile")
+        self.assertEqual(language_for("data.unknown"), "")
+
+    def test_fence_grows_when_content_has_backticks(self):
+        entry = FileEntry("a.md", "```python\nprint(1)\n```", 10, "utf-8", 5)
+        meta = Meta("demo", "now", 1, 5, 10)
+        document = render([entry], "demo/", meta)
+        self.assertIn("````markdown", document)
+
+    def test_xml_is_valid(self):
+        entry = FileEntry("a<b>.txt", "x ]]> y", 7, "utf-8", 3)
+        meta = Meta("demo", "now", 1, 3, 7)
+        document = render([entry], "demo/", meta, "xml")
+        root = ET.fromstring(document)
+        self.assertEqual(root.get("files"), "1")
+        self.assertEqual(root.find("files/file").text, "x ]]> y")
+
+    def test_no_tree_option(self):
+        meta = Meta("demo", "now", 0, 0)
+        document = render([], "demo/", meta, show_tree=False)
+        self.assertNotIn("Project structure", document)
+
+    def test_split_respects_budget(self):
+        entries = [FileEntry(f"f{i}.txt", "x" * 400, 400, "utf-8", 100) for i in range(5)]
+        chunks = split_entries(entries, 250, overhead_tokens=0)
+        self.assertEqual([len(chunk) for chunk in chunks], [2, 2, 1])
+        for chunk in chunks:
+            self.assertLessEqual(sum(entry.tokens + 8 for entry in chunk), 250)
+
+    def test_single_oversized_entry_gets_its_own_chunk(self):
+        entries = [
+            FileEntry("huge.txt", "x", 1, "utf-8", 10_000),
+            FileEntry("small.txt", "x", 1, "utf-8", 10),
+        ]
+        chunks = split_entries(entries, 500)
+        self.assertEqual([[entry.rel for entry in chunk] for chunk in chunks], [["huge.txt"], ["small.txt"]])
+
+    def test_token_estimate(self):
+        self.assertGreater(estimate_tokens("hello world"), 0)
+        self.assertGreater(estimate_tokens("привет мир"), estimate_tokens("hello world"))
+        self.assertEqual(human_tokens(8_400), "8.4k")
+        self.assertEqual(human_bytes(2048), "2.0 KB")
+
+
+class CollectTests(unittest.TestCase):
+    def test_collect_skips_ignored_binary_and_large_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "src" / "main.py").write_text("print('hi')\n", encoding="utf-8")
+            (root / "secret.txt").write_text("nope\n", encoding="utf-8")
+            (root / ".gitignore").write_text("secret.txt\n", encoding="utf-8")
+            (root / "image.png").write_bytes(b"\x89PNG\x00\x00")
+            (root / "big.txt").write_text("x" * 5000, encoding="utf-8")
+            (root / "node_modules").mkdir()
+            (root / "node_modules" / "lib.js").write_text("x\n", encoding="utf-8")
+
+            collection = collect(root, max_file_size=1024)
+            paths = {entry.rel for entry in collection.entries}
+            self.assertIn("src/main.py", paths)
+            self.assertIn(".gitignore", paths)
+            self.assertNotIn("secret.txt", paths)
+            self.assertNotIn("image.png", paths)
+            self.assertNotIn("big.txt", paths)
+            self.assertNotIn("node_modules/lib.js", paths)
+            reasons = {skip.rel: skip.reason for skip in collection.skipped}
+            self.assertEqual(reasons["secret.txt"], "ignored")
+            self.assertEqual(reasons["image.png"], "binary")
+            self.assertEqual(reasons["big.txt"], "too large")
+
+    def test_include_filter(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("a\n", encoding="utf-8")
+            (root / "b.md").write_text("b\n", encoding="utf-8")
+            collection = collect(root, include=["*.py"])
+            self.assertEqual([entry.rel for entry in collection.entries], ["a.py"])
+
+
+class CliTests(unittest.TestCase):
+    def _run(self, *argv: str) -> str:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = main(list(argv))
+        self.assertEqual(code, 0, stderr.getvalue())
+        return stderr.getvalue()
+
+    def test_writes_output_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hello.py").write_text("print('hello')\n", encoding="utf-8")
+            output = root / "context.md"
+            self._run(str(root), "-o", str(output))
+            text = output.read_text(encoding="utf-8")
+            self.assertIn("### `hello.py`", text)
+            self.assertIn("print('hello')", text)
+
+    def test_split_creates_parts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for index in range(4):
+                (root / f"file{index}.txt").write_text("word " * 200, encoding="utf-8")
+            output = root / "context.md"
+            self._run(str(root), "-o", str(output), "--max-tokens", "300")
+            parts = sorted(root.glob("context.part*.md"))
+            self.assertGreater(len(parts), 1)
+            self.assertIn("part 1 of", parts[0].read_text(encoding="utf-8"))
+
+    def test_tree_only_has_no_files_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("x\n", encoding="utf-8")
+            output = root / "context.md"
+            self._run(str(root), "-o", str(output), "--tree-only")
+            text = output.read_text(encoding="utf-8")
+            self.assertIn("## Project structure", text)
+            self.assertIn("a.py", text)
+            self.assertNotIn("## Files", text)
+            self.assertIn("1 files", text)
+
+    def test_missing_path_returns_error(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = main(["definitely/not/here"])
+        self.assertEqual(code, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

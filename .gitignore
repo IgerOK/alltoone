@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# alltoone output
+alltoone-context*
+parts/
+*.part1.md
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
