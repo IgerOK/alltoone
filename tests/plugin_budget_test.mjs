@@ -163,6 +163,13 @@ check(
 )
 check("the pointer rides with the meter line", resumeOn.tails[0].includes("[budget]"), true)
 check("system prompt stays untouched with autoResume", resumeOn.systemSizes, [0, 0])
+check(
+  "the meter always names the exit",
+  [belowThreshold.tails[0], transition.tails[0], resumeOn.tails[1]].every((text) =>
+    text.includes("new chat: /resume"),
+  ),
+  true,
+)
 
 const log = readFileSync(join(work, ".opencode", "handoff", "budget.log"), "utf8")
 check("trace records the request", log.includes("compact requested ses_critical_on"), true)

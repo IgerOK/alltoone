@@ -9,11 +9,13 @@ the handoff workflow below: the same rules apply to any project that copies
 Every request carries a line injected by `.opencode/plugins/context-budget`:
 
 ```text
-[budget] 118k/200k used (59%) · left 82k · reserve 36k · mode=normal
+[budget] 118k/200k used (59%) · left 82k · reserve 36k · mode=normal · new chat: /resume
 ```
 
 Treat it as the only source of truth about the window. Do not estimate the
-remaining context yourself and do not argue with the number.
+remaining context yourself and do not argue with the number. The line always
+ends with `new chat: /resume`: the exit stays in view in every mode, not only
+when the window is full.
 
 | mode | what to do |
 | --- | --- |

@@ -140,7 +140,7 @@ export default Plugin.define({
 
         const line =
           `[budget] ${fmt(used)}/${fmt(window)} used (${Math.round(ratio * 100)}%)` +
-          ` · left ${fmt(left)} · reserve ${fmt(reserve)} · mode=${mode}`
+          ` · left ${fmt(left)} · reserve ${fmt(reserve)} · mode=${mode} · new chat: /resume`
 
         // Critical is the last moment a compaction can still be admitted, and
         // the request only runs at the next step boundary — not inside this
