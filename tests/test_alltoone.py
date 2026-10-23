@@ -179,6 +179,75 @@ class CollectTests(unittest.TestCase):
             self.assertEqual(reasons["image.png"], "binary")
             self.assertEqual(reasons["big.txt"], "too large")
 
+    def test_exclude_prunes_whole_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "src" / "a.py").write_text("a\n", encoding="utf-8")
+            (root / "reference").mkdir()
+            (root / "reference" / "notes.md").write_text("n\n", encoding="utf-8")
+            (root / "reference" / "deep").mkdir()
+            (root / "reference" / "deep" / "x.txt").write_text("x\n", encoding="utf-8")
+
+            collection = collect(root, exclude=["reference"])
+            self.assertEqual([entry.rel for entry in collection.entries], ["src/a.py"])
+            reasons = {skip.rel: skip.reason for skip in collection.skipped}
+            self.assertEqual(reasons["reference"], "excluded")
+
+    def test_alltooneignore_survives_no_gitignore(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("a\n", encoding="utf-8")
+            (root / "reference").mkdir()
+            (root / "reference" / "notes.md").write_text("n\n", encoding="utf-8")
+            (root / ".gitignore").write_text("a.py\n", encoding="utf-8")
+            (root / ".alltooneignore").write_text("reference/\n", encoding="utf-8")
+
+            collection = collect(root, use_gitignore=False)
+            paths = {entry.rel for entry in collection.entries}
+            self.assertIn("a.py", paths)
+            self.assertNotIn("reference/notes.md", paths)
+
+    def test_alltooneignore_inside_a_folder_drops_the_subtree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "src" / "a.py").write_text("a\n", encoding="utf-8")
+            (root / "reference").mkdir()
+            (root / "reference" / ".alltooneignore").write_text("*\n", encoding="utf-8")
+            (root / "reference" / "notes.md").write_text("n\n", encoding="utf-8")
+            (root / "reference" / "deep").mkdir()
+            (root / "reference" / "deep" / "x.txt").write_text("x\n", encoding="utf-8")
+
+            collection = collect(root)
+            self.assertEqual([entry.rel for entry in collection.entries], ["src/a.py"])
+
+    def test_alltooneignore_with_bom(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("a\n", encoding="utf-8")
+            (root / "reference").mkdir()
+            (root / "reference" / "notes.md").write_text("n\n", encoding="utf-8")
+            # Windows editors (and PowerShell) write a BOM; the first rule must still work.
+            (root / ".alltooneignore").write_bytes("reference/\n".encode("utf-8-sig"))
+
+            collection = collect(root)
+            paths = {entry.rel for entry in collection.entries}
+            self.assertIn("a.py", paths)
+            self.assertNotIn("reference/notes.md", paths)
+
+    def test_negation_in_alltooneignore(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "debug.log").write_text("d\n", encoding="utf-8")
+            (root / "keep.log").write_text("k\n", encoding="utf-8")
+            (root / ".alltooneignore").write_text("*.log\n!keep.log\n", encoding="utf-8")
+
+            collection = collect(root)
+            paths = {entry.rel for entry in collection.entries}
+            self.assertIn("keep.log", paths)
+            self.assertNotIn("debug.log", paths)
+
     def test_include_filter(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -228,6 +297,47 @@ class CliTests(unittest.TestCase):
             self.assertIn("a.py", text)
             self.assertNotIn("## Files", text)
             self.assertIn("1 files", text)
+
+    def test_exclude_from_file_and_show_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app.py").write_text("app\n", encoding="utf-8")
+            (root / "reference").mkdir()
+            (root / "reference" / "notes.md").write_text("reference material\n", encoding="utf-8")
+            rules = root / "my-rules.txt"
+            rules.write_text("reference/\n", encoding="utf-8")
+            output = root / "context.md"
+
+            stderr = self._run(
+                str(root),
+                "-o",
+                str(output),
+                "--exclude-from",
+                str(rules),
+                "--show-skipped",
+            )
+            text = output.read_text(encoding="utf-8")
+            self.assertIn("app.py", text)
+            self.assertNotIn("reference material", text)
+            self.assertIn("reference (ignored)", stderr)
+
+    def test_exclude_flag_prunes_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app.py").write_text("app\n", encoding="utf-8")
+            (root / "reference").mkdir()
+            (root / "reference" / "notes.md").write_text("reference material\n", encoding="utf-8")
+            output = root / "context.md"
+            self._run(str(root), "-o", str(output), "--exclude", "reference")
+            self.assertNotIn("reference material", output.read_text(encoding="utf-8"))
+
+    def test_missing_exclude_file_returns_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main([tmp, "--exclude-from", str(Path(tmp) / "nope.txt")])
+            self.assertEqual(code, 2)
+            self.assertIn("exclude file not found", stderr.getvalue())
 
     def test_missing_path_returns_error(self):
         stderr = io.StringIO()

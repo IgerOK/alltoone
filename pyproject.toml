@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alltoone"
-version = "0.3.0"
+version = "0.4.0"
 description = "Pack every text file of a project into one context file for AI agents."
 readme = "README.md"
 requires-python = ">=3.10"

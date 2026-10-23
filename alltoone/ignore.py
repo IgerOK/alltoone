@@ -181,7 +181,8 @@ class IgnoreMatcher:
     def add_file(self, path: Path, base: str = "") -> bool:
         """Load rules from ``path``. Returns ``True`` if the file was read."""
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            # utf-8-sig also strips a BOM that Windows editors like to add.
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
         except OSError:
             return False
         self.add_lines(text.splitlines(), base=base)

@@ -25,6 +25,7 @@ DEFAULTS: dict[str, object] = {
     "output": None,
     "include": [],
     "exclude": [],
+    "exclude_from": [],
     "use_gitignore": True,
     "use_default_ignores": True,
     "max_file_size_kb": 512,
@@ -33,6 +34,7 @@ DEFAULTS: dict[str, object] = {
     "files": True,
     "integrity": True,
     "clipboard": False,
+    "show_skipped": False,
 }
 
 EPILOG = """\
@@ -61,7 +63,18 @@ def build_parser() -> argparse.ArgumentParser:
         "-f", "--format", choices=("markdown", "xml", "plain"), help="output format (default: markdown)"
     )
     parser.add_argument("--include", action="append", metavar="GLOB", help="only pack matching files (repeatable)")
-    parser.add_argument("--exclude", action="append", metavar="GLOB", help="skip matching files (repeatable)")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        metavar="GLOB",
+        help="skip matching files or whole directories (repeatable)",
+    )
+    parser.add_argument(
+        "--exclude-from",
+        action="append",
+        metavar="FILE",
+        help="read exclude patterns from FILE, gitignore syntax (repeatable)",
+    )
     parser.add_argument(
         "--no-gitignore",
         action="store_const",
@@ -103,6 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="copy the result to the system clipboard",
     )
     parser.add_argument("-q", "--quiet", action="store_true", help="do not print the summary")
+    parser.add_argument(
+        "--show-skipped",
+        action="store_const",
+        const=True,
+        default=None,
+        help="list every skipped path with the reason",
+    )
     parser.add_argument("--version", action="version", version=f"alltoone {__version__}")
     return parser
 
@@ -140,6 +160,8 @@ def resolve_settings(args: argparse.Namespace, config: dict[str, object]) -> dic
         settings["include"] = list(args.include)
     if args.exclude is not None:
         settings["exclude"] = list(args.exclude)
+    if args.exclude_from is not None:
+        settings["exclude_from"] = list(args.exclude_from)
     if args.no_gitignore:
         settings["use_gitignore"] = False
     if args.no_default_ignores:
@@ -157,6 +179,8 @@ def resolve_settings(args: argparse.Namespace, config: dict[str, object]) -> dic
         settings["integrity"] = False
     if args.clipboard:
         settings["clipboard"] = True
+    if args.show_skipped:
+        settings["show_skipped"] = True
     return settings
 
 
@@ -202,7 +226,7 @@ def _copy_to_clipboard(text: str) -> None:
     raise SystemExit("error: no clipboard tool found")
 
 
-def _print_summary(collection, outputs: list[Path]) -> None:
+def _print_summary(collection, outputs: list[Path], show_skipped: bool = False) -> None:
     reasons = Counter(skip.reason for skip in collection.skipped)
     print(f"alltoone {__version__}", file=sys.stderr)
     print(f"  root     {collection.root}", file=sys.stderr)
@@ -214,6 +238,9 @@ def _print_summary(collection, outputs: list[Path]) -> None:
     if reasons:
         detail = ", ".join(f"{reason} {count}" for reason, count in sorted(reasons.items()))
         print(f"  skipped  {sum(reasons.values())} ({detail})", file=sys.stderr)
+    if show_skipped:
+        for skip in collection.skipped:
+            print(f"  - {skip.rel} ({skip.reason})", file=sys.stderr)
     for path in outputs:
         print(f"  output   {path}", file=sys.stderr)
 
@@ -334,12 +361,24 @@ def main(argv: list[str] | None = None) -> int:
     if output_path is not None:
         exclude_patterns.append(f"{output_path.stem}.part*{output_path.suffix}")
 
+    extra_ignore_files: list[Path] = []
+    for value in settings["exclude_from"]:  # type: ignore[union-attr]
+        candidate = Path(str(value)).expanduser()
+        if not candidate.is_absolute():
+            candidate = (Path.cwd() / candidate).resolve()
+        if not candidate.is_file():
+            print(f"error: exclude file not found: {candidate}", file=sys.stderr)
+            return 2
+        extra_ignore_files.append(candidate)
+        skip_paths.append(candidate)
+
     collection = collect(
         root,
         use_gitignore=bool(settings["use_gitignore"]),
         use_default_ignores=bool(settings["use_default_ignores"]),
         include=list(settings["include"]),  # type: ignore[arg-type]
         exclude=exclude_patterns,
+        extra_ignore_files=extra_ignore_files,
         max_file_size=int(settings["max_file_size_kb"]) * 1024,  # type: ignore[arg-type]
         skip_paths=skip_paths,
     )
@@ -398,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
         _copy_to_clipboard("\n\n".join(documents))
 
     if not args.quiet:
-        _print_summary(collection, written)
+        _print_summary(collection, written, bool(settings["show_skipped"]))
         if len(documents) > 1:
             print(
                 f"  split    {len(documents)} parts of <= {human_tokens(int(max_tokens))} tokens",

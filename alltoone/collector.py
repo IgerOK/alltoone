@@ -29,9 +29,6 @@ BINARY_EXTENSIONS: frozenset[str] = frozenset(
     """.split()
 )
 
-IGNORE_FILES: tuple[str, ...] = (".gitignore", ".alltooneignore")
-
-
 @dataclass
 class FileEntry:
     """One text file that will be packed."""
@@ -107,6 +104,15 @@ def _sorted_entries(directory: Path) -> list[os.DirEntry[str]]:
     return sorted(items, key=lambda item: (not item.is_dir(follow_symlinks=False), item.name.lower()))
 
 
+def _load_ignores(matcher: IgnoreMatcher, directory: Path, rel: str, use_gitignore: bool) -> None:
+    """Read ignore files of one directory. ``.alltooneignore`` always applies."""
+    names = ((".gitignore",) if use_gitignore else ()) + (".alltooneignore",)
+    for name in names:
+        candidate = directory / name
+        if candidate.is_file():
+            matcher.add_file(candidate, base=rel)
+
+
 def collect(
     root: Path,
     *,
@@ -114,6 +120,7 @@ def collect(
     use_default_ignores: bool = True,
     include: Sequence[str] = (),
     exclude: Sequence[str] = (),
+    extra_ignore_files: Sequence[Path] = (),
     max_file_size: int = 512 * 1024,
     skip_paths: Iterable[Path] = (),
 ) -> Collection:
@@ -129,11 +136,9 @@ def collect(
                   max_file_size, resolved_skips, collection)
         return collection
 
-    if use_gitignore:
-        for name in IGNORE_FILES:
-            candidate = root / name
-            if candidate.is_file():
-                matcher.add_file(candidate, base="")
+    _load_ignores(matcher, root, "", use_gitignore)
+    for extra in extra_ignore_files:
+        matcher.add_file(extra, base="")
 
     def walk(directory: Path, rel_dir: str) -> None:
         for item in _sorted_entries(directory):
@@ -145,14 +150,14 @@ def collect(
                 continue
 
             if is_dir:
+                # An explicit --exclude wins over ignore files, so the reason is clear.
+                if exclude_globs and any_match(exclude_globs, rel, is_dir=True):
+                    collection.skipped.append(Skip(rel, "excluded"))
+                    continue
                 if matcher.match(rel, is_dir=True):
                     collection.skipped.append(Skip(rel, "ignored"))
                     continue
-                if use_gitignore:
-                    for name in IGNORE_FILES:
-                        candidate = Path(item.path) / name
-                        if candidate.is_file():
-                            matcher.add_file(candidate, base=rel)
+                _load_ignores(matcher, Path(item.path), rel, use_gitignore)
                 walk(Path(item.path), rel)
                 continue
 
@@ -175,11 +180,11 @@ def _add_file(
     resolved_skips: set[Path],
     collection: Collection,
 ) -> None:
-    if matcher.match(rel, is_dir=False):
-        collection.skipped.append(Skip(rel, "ignored"))
-        return
     if exclude_globs and any_match(exclude_globs, rel):
         collection.skipped.append(Skip(rel, "excluded"))
+        return
+    if matcher.match(rel, is_dir=False):
+        collection.skipped.append(Skip(rel, "ignored"))
         return
     if include_globs and not any_match(include_globs, rel):
         collection.skipped.append(Skip(rel, "not included"))
@@ -189,7 +194,7 @@ def _add_file(
         return
     try:
         if path.resolve() in resolved_skips:
-            collection.skipped.append(Skip(rel, "output file"))
+            collection.skipped.append(Skip(rel, "internal file"))
             return
         size = path.stat().st_size
     except OSError:

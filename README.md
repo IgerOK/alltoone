@@ -78,14 +78,44 @@ python -m alltoone unpack context.md -o restored/
 
 Дополнительно читаются `.gitignore` и `.alltooneignore` — включая вложенные в подпапки.
 Правила работают как в Git: `!` возвращает файл, `dir/` — только каталоги, `**` — любая глубина.
+`.alltooneignore` читается всегда, даже с `--no-gitignore` — это «свой» файл инструмента.
 
 Свои правила:
 
 ```bash
 python -m alltoone --exclude "*.test.ts" --exclude "docs/**"
-python -m alltoone --no-gitignore            # игнорировать .gitignore
-python -m alltoone --no-default-ignores      # отключить встроенный список
+python -m alltoone --exclude reference                 # выбросить каталог целиком
+python -m alltoone --exclude-from my-rules.txt         # правила из файла
+python -m alltoone --show-skipped                      # показать, что и почему выброшено
+python -m alltoone --no-gitignore                      # не читать .gitignore
+python -m alltoone --no-default-ignores                # отключить встроенный список
 ```
+
+`--exclude` отсекает и файлы, и **каталоги целиком** (поддерево не обходится).
+`--exclude-from` понимает полный синтаксис ignore-файлов, включая `!` и `dir/`.
+
+### Справочные материалы в проекте
+
+Если рядом с кодом лежит папка с документацией, выжимками или чужими исходниками,
+её удобно исключить, не трогая остальное:
+
+```bash
+python -m alltoone . --exclude reference --exclude "docs/vendor/**" -o context.md
+```
+
+Ещё надёжнее — положить маркер прямо в папку, тогда правило поедет вместе с проектом
+и сработает у любого, кто запустит alltoone:
+
+```text
+reference/.alltooneignore:
+*
+```
+
+`*` игнорирует всё содержимое папки, включая сам маркер. Так же можно поступить с
+`docs/`, `samples/`, `third_party/` — где угодно, где лежит не ваш код.
+
+Проверить результат: `--show-skipped` печатает каждый пропущенный путь с причиной
+(`ignored`, `excluded`, `binary`, `too large`, `not included`).
 
 `--include` — белый список: если он задан, остаётся только то, что совпало.
 Учти: `.gitignore` проверяется раньше, поэтому файл, исключённый им, не вернуть через
@@ -121,8 +151,10 @@ python -m alltoone --no-default-ignores      # отключить встроен
 | `-o, --output FILE` | куда писать (`-` = stdout) |
 | `-f, --format` | `markdown`, `xml`, `plain` |
 | `--include GLOB` | только совпавшие файлы (можно несколько) |
-| `--exclude GLOB` | исключить совпавшие |
-| `--no-gitignore` | не читать `.gitignore` / `.alltooneignore` |
+| `--exclude GLOB` | исключить файлы или каталоги целиком |
+| `--exclude-from FILE` | правила исключения из файла (gitignore-синтаксис) |
+| `--show-skipped` | показать все пропущенные пути и причины |
+| `--no-gitignore` | не читать `.gitignore` (`.alltooneignore` читается всегда) |
 | `--no-default-ignores` | без встроенного списка |
 | `--max-file-size KB` | лимит размера файла, КБ |
 | `--max-tokens N` | разбить результат на части по N токенов |
