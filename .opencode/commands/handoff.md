@@ -9,7 +9,8 @@ Prepare a clean handoff so a fresh chat can continue without the history.
    lines, paths verbatim, no secrets.
 2. Rewrite `.opencode/handoff/files.txt` with only the files the next session
    needs to read, one relative path per line. Prefer 5–15 files.
-3. Run `python -m alltoone handoff` and report the output path and size.
-4. Tell the user to open a new chat and run `/resume`.
+3. Run `python -m alltoone handoff --check` and fix every problem it reports.
+4. Run `python -m alltoone handoff` and report the output path and size.
+5. Tell the user to open a new chat and run `/resume`.
 
 Do not paste the pack into the chat. The file is the deliverable.

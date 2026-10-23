@@ -19,7 +19,7 @@ remaining context yourself and do not argue with the number.
 | --- | --- |
 | `normal` | work normally |
 | `checkpoint` | update `.opencode/handoff/STATE.md` before starting anything new |
-| `handoff` | stop new work, finish `STATE.md`, refresh `files.txt`, run `python -m alltoone handoff`, ask the user to open a new chat with `/resume` |
+| `handoff` | stop new work, finish `STATE.md`, refresh `files.txt`, run `python -m alltoone handoff --check` until it passes, run `python -m alltoone handoff`, ask the user to open a new chat with `/resume` |
 | `critical` | no more tool calls except writing `STATE.md`; stop and ask for a new chat |
 
 The directive is repeated only when the mode changes. Do not wait for the user
@@ -84,5 +84,6 @@ Rules:
 ## Verification
 
 - `python -m unittest discover -s tests` must stay green.
+- `python -m alltoone handoff --check` must pass before a handoff.
 - New behaviour needs a test in `tests/test_alltoone.py`.
 - The package has no runtime dependencies; keep it that way.

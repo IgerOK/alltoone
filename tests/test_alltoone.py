@@ -411,6 +411,99 @@ class HandoffTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn("file list is empty", stderr.getvalue())
 
+    GOOD_STATE = """# State
+
+## Goal
+Continue the work.
+
+## Done
+- `a.py` exists.
+
+## Next
+1. Read `b.py`.
+
+## Decisions
+- Keep it small.
+
+## Open questions
+- None.
+
+## Files
+- `b.py` — the next step.
+
+## Commands
+- `python -m unittest`
+"""
+
+    def _check(self, root: Path, files: str, state: str | None = None):
+        state_path = root / "STATE.md"
+        state_path.write_text(self.GOOD_STATE if state is None else state, encoding="utf-8")
+        wanted = root / "files.txt"
+        wanted.write_text(files, encoding="utf-8")
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = main(
+                [
+                    "handoff",
+                    str(root),
+                    "--state",
+                    str(state_path),
+                    "--files-from",
+                    str(wanted),
+                    "--check",
+                ]
+            )
+        return code, stderr.getvalue()
+
+    def test_check_accepts_a_good_state_and_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+            code, stderr = self._check(root, "b.py\n")
+            self.assertEqual(code, 0)
+            self.assertIn("  ok", stderr)
+            # The check must not write a pack.
+            self.assertFalse((root / ".opencode").exists())
+
+    def test_check_reports_a_state_over_the_line_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+            bloated = self.GOOD_STATE.replace("## Done\n", "## Done\n" + "- filler\n" * 60)
+            code, stderr = self._check(root, "b.py\n", state=bloated)
+            self.assertEqual(code, 1)
+            self.assertIn("limit 60", stderr)
+
+    def test_check_reports_missing_sections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+            broken = self.GOOD_STATE.replace("## Decisions", "## Notes")
+            code, stderr = self._check(root, "b.py\n", state=broken)
+            self.assertEqual(code, 1)
+            self.assertIn("missing sections: Decisions", stderr)
+
+    def test_check_reports_bad_paths_and_duplicates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+            code, stderr = self._check(root, "b.py\nmissing.py\n../escape.py\nC:/abs.py\nb.py\n")
+            self.assertEqual(code, 1)
+            self.assertIn("missing.py does not exist", stderr)
+            self.assertIn("../escape.py must be a relative path", stderr)
+            self.assertIn("C:/abs.py must be a relative path", stderr)
+            self.assertIn("b.py is listed twice", stderr)
+
+    def test_check_reports_a_listed_but_ignored_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+            (root / "secret.py").write_text("TOKEN = 'x'\n", encoding="utf-8")
+            (root / ".gitignore").write_text("secret.py\n", encoding="utf-8")
+            code, stderr = self._check(root, "b.py\nsecret.py\n")
+            self.assertEqual(code, 1)
+            self.assertIn("secret.py is skipped", stderr)
+
 
 class PluginBudgetTests(unittest.TestCase):
     """The context-budget plugin is TypeScript; node drives its branches.

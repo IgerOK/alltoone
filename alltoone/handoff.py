@@ -25,6 +25,11 @@ DEFAULT_STATE = f"{HANDOFF_DIR}/STATE.md"
 DEFAULT_FILES = f"{HANDOFF_DIR}/files.txt"
 DEFAULT_OUTPUT = f"{HANDOFF_DIR}/pack.md"
 
+# The briefing schema lives in AGENTS.md; the names and the limit are part of
+# the contract, so the tool checks them instead of trusting the agent.
+REQUIRED_SECTIONS = ("Goal", "Done", "Next", "Decisions", "Open questions", "Files", "Commands")
+MAX_STATE_LINES = 60
+
 
 def _read_list(path: Path) -> list[str]:
     """Read relative paths, one per line. Blank lines and ``#`` comments are ignored."""
@@ -36,6 +41,100 @@ def _read_list(path: Path) -> list[str]:
             continue
         result.append(value)
     return result
+
+
+def _sections(lines: list[str]) -> dict[str, int]:
+    """Map ``## Section`` to its number of non-blank lines, ignoring fenced code."""
+    content: dict[str, int] = {}
+    current: str | None = None
+    fenced = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fenced = not fenced
+            if current is not None:
+                content[current] += 1
+            continue
+        if not fenced and line.startswith("## "):
+            current = line[3:].strip()
+            content.setdefault(current, 0)
+            continue
+        if current is not None and stripped:
+            content[current] += 1
+    return content
+
+
+def check_state(state: Path) -> list[str]:
+    """Return the reasons ``STATE.md`` is not a usable briefing, empty if it is."""
+    if not state.is_file():
+        return [f"state: file not found: {state}"]
+    lines = state.read_text(encoding="utf-8-sig").splitlines()
+    problems: list[str] = []
+
+    first = next((line.strip() for line in lines if line.strip()), "")
+    if first != "# State":
+        problems.append("state: must start with '# State'")
+    if len(lines) > MAX_STATE_LINES:
+        problems.append(f"state: {len(lines)} lines, limit {MAX_STATE_LINES}")
+
+    sections = _sections(lines)
+    missing = [name for name in REQUIRED_SECTIONS if name not in sections]
+    if missing:
+        problems.append("state: missing sections: " + ", ".join(missing))
+    order = [REQUIRED_SECTIONS.index(name) for name in sections if name in REQUIRED_SECTIONS]
+    if order != sorted(order):
+        problems.append("state: sections out of order: " + " -> ".join(REQUIRED_SECTIONS))
+    empty = [name for name in REQUIRED_SECTIONS if name in sections and not sections[name]]
+    if empty:
+        problems.append("state: empty sections: " + ", ".join(empty))
+    return problems
+
+
+def _check_files(root: Path, files_from: Path, state: Path | None) -> list[str]:
+    """Return the reasons the file list cannot produce the pack the next chat needs."""
+    if not files_from.is_file():
+        return [f"files: file not found: {files_from}"]
+    try:
+        wanted = _read_list(files_from)
+    except OSError as exc:
+        return [f"files: cannot read {files_from}: {exc}"]
+    if not wanted:
+        return ["files: list is empty"]
+
+    problems: list[str] = []
+    seen: set[str] = set()
+    for rel in wanted:
+        head = rel.split("/")[0]
+        if rel.startswith("/") or ":" in head or ".." in rel.split("/"):
+            problems.append(f"files: {rel} must be a relative path inside the project")
+        elif rel not in seen and wanted.count(rel) > 1:
+            problems.append(f"files: {rel} is listed twice")
+        seen.add(rel)
+
+    collection = collect(root, skip_paths=[path for path in (state, files_from) if path is not None])
+    packed = {entry.rel for entry in collection.entries}
+    skipped = {skip.rel: skip.reason for skip in collection.skipped}
+    for rel in dict.fromkeys(wanted):
+        if rel.startswith("/") or ":" in rel.split("/")[0] or ".." in rel.split("/"):
+            continue
+        if not (root / rel).is_file():
+            problems.append(f"files: {rel} does not exist")
+        elif rel in skipped:
+            problems.append(f"files: {rel} is skipped ({skipped[rel]})")
+        elif rel not in packed:
+            problems.append(f"files: {rel} is not packed")
+    return problems
+
+
+def check_handoff(root: Path, *, state: Path | None = None, files_from: Path | None = None) -> list[str]:
+    """Return every problem that would make the next session start blind."""
+    root = root.resolve()
+    problems = check_state(state) if state is not None else []
+    if files_from is None:
+        problems.append("files: no file list")
+        return problems
+    problems.extend(_check_files(root, files_from, state))
+    return problems
 
 
 def build_handoff(
@@ -119,6 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--no-tree", action="store_true", help="omit the project tree")
     parser.add_argument("--no-integrity", action="store_true", help="omit the SHA-256 manifest")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="validate the state and the file list, write nothing (exit 1 on problems)",
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="do not print the summary")
     return parser
 
@@ -142,6 +246,20 @@ def handoff_main(argv: list[str]) -> int:
         print(f"error: file list not found: {files_from}", file=sys.stderr)
         return 2
 
+    if args.check:
+        problems = check_handoff(root, state=state, files_from=files_from)
+        if not args.quiet:
+            print("alltoone handoff --check", file=sys.stderr)
+            print(f"  state    {state}", file=sys.stderr)
+            print(f"  files    {files_from}", file=sys.stderr)
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        if problems:
+            return 1
+        if not args.quiet:
+            print("  ok", file=sys.stderr)
+        return 0
+
     try:
         document = build_handoff(
             root,
@@ -158,6 +276,17 @@ def handoff_main(argv: list[str]) -> int:
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8", newline="\n")
+
+    if state.is_file():
+        # The build stays forgiving: a missing section is not fatal, but a state
+        # that breaks the contract silently makes the next chat start blind.
+        hints = check_state(state)
+        if hints:
+            print(
+                "warning: STATE.md does not follow the schema "
+                f"({hints[0]}); run `python -m alltoone handoff --check`",
+                file=sys.stderr,
+            )
 
     if not args.quiet:
         print("alltoone handoff", file=sys.stderr)
