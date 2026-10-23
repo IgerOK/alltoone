@@ -504,6 +504,76 @@ Continue the work.
             self.assertEqual(code, 1)
             self.assertIn("secret.py is skipped", stderr)
 
+    def test_unpack_detects_a_handoff_pack_without_a_format_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "proj"
+            (root / ".opencode/handoff").mkdir(parents=True)
+            (root / "app.py").write_text("print(1)\n", encoding="utf-8")
+            state = root / ".opencode/handoff/STATE.md"
+            state.write_text("# State\n\n## Goal\nContinue.\n", encoding="utf-8")
+            wanted = root / ".opencode/handoff/files.txt"
+            wanted.write_text("app.py\n", encoding="utf-8")
+            pack = Path(tmp) / "pack.md"
+
+            self.assertEqual(
+                main(
+                    [
+                        "handoff",
+                        str(root),
+                        "--state",
+                        str(state),
+                        "--files-from",
+                        str(wanted),
+                        "-o",
+                        str(pack),
+                        "-q",
+                    ]
+                ),
+                0,
+            )
+            dest = Path(tmp) / "out"
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main(["unpack", str(pack), "-o", str(dest)])
+            self.assertEqual(code, 0, stderr.getvalue())
+            self.assertEqual((dest / "app.py").read_text(encoding="utf-8"), "print(1)\n")
+            self.assertIn("files verified", stderr.getvalue())
+            # The state is text in the header, not a packed file.
+            self.assertFalse((dest / ".opencode").exists())
+
+    def test_unpack_ignores_markdown_quoted_in_the_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "proj"
+            (root / ".opencode/handoff").mkdir(parents=True)
+            (root / "app.py").write_text("print(1)\n", encoding="utf-8")
+            state = root / ".opencode/handoff/STATE.md"
+            state.write_text(
+                "# State\n\n## Done\n\n```md\n### `fake.py`\nnot a real file\n```\n",
+                encoding="utf-8",
+            )
+            wanted = root / ".opencode/handoff/files.txt"
+            wanted.write_text("app.py\n", encoding="utf-8")
+            pack = Path(tmp) / "pack.md"
+            main(
+                [
+                    "handoff",
+                    str(root),
+                    "--state",
+                    str(state),
+                    "--files-from",
+                    str(wanted),
+                    "-o",
+                    str(pack),
+                    "-q",
+                ]
+            )
+            dest = Path(tmp) / "out"
+            with contextlib.redirect_stderr(io.StringIO()):
+                code = main(["unpack", str(pack), "-o", str(dest)])
+            self.assertEqual(code, 0)
+            self.assertTrue((dest / "app.py").is_file())
+            self.assertFalse((dest / "fake.py").exists())
+
 
 class PluginBudgetTests(unittest.TestCase):
     """The context-budget plugin is TypeScript; node drives its branches.

@@ -53,6 +53,14 @@ def detect_format(text: str, filename: str = "") -> str:
         return "markdown"
     if re.search(r"^PROJECT: ", text, re.MULTILINE):
         return "plain"
+    # A handoff pack starts with the session state and only then the body, so
+    # the markers are not at byte zero. The state is free-form: only the first
+    # lines are scanned, and the body marker wins over anything in the state.
+    head = "\n".join(text.splitlines()[:40])
+    if head.lstrip().startswith("<?xml") or re.search(r"^<context[\s>]", head, re.MULTILINE):
+        return "xml"
+    if re.search(r"^# (?:Project context|Handoff state):", head, re.MULTILINE):
+        return "markdown"
     if MARKDOWN_HEADING.search(text):
         return "markdown"
     raise UnpackError("cannot detect the format of the context file; pass --format")
@@ -60,6 +68,12 @@ def detect_format(text: str, filename: str = "") -> str:
 
 def parse_markdown(text: str) -> tuple[list[UnpackedFile], Integrity]:
     """Extract ``### `path``` sections followed by a fenced code block."""
+    # In a handoff pack the state precedes the body, and the state may quote
+    # markdown of its own (``### `path``` examples, fences). Anything before the
+    # body marker is not part of the project and must not be parsed.
+    marker = text.find("\n# Project context:")
+    if marker >= 0:
+        text = text[marker + 1 :]
     lines = text.splitlines(keepends=True)
     files: list[UnpackedFile] = []
     index = 0

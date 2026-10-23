@@ -277,18 +277,16 @@ def handoff_main(argv: list[str]) -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8", newline="\n")
 
-    if state.is_file():
+    if not args.quiet:
         # The build stays forgiving: a missing section is not fatal, but a state
         # that breaks the contract silently makes the next chat start blind.
-        hints = check_state(state)
+        hints = check_state(state) if state.is_file() else []
         if hints:
             print(
                 "warning: STATE.md does not follow the schema "
                 f"({hints[0]}); run `python -m alltoone handoff --check`",
                 file=sys.stderr,
             )
-
-    if not args.quiet:
         print("alltoone handoff", file=sys.stderr)
         print(f"  state    {state if state.is_file() else '(none)'}", file=sys.stderr)
         print(f"  files    {files_from if files_from.is_file() else '(all collected)'}", file=sys.stderr)
