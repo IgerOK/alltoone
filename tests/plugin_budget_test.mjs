@@ -37,7 +37,7 @@ function check(name, actual, expected) {
 
 /** A plugin context that reports fixed provider usage and records compaction. */
 function makeContext(autoCompact, usedTokens) {
-  const state = { hook: null, compactions: [], systems: [] }
+  const state = { hook: null, compactions: [] }
   const ctx = {
     options: { autoCompact },
     location: { directory: work },
@@ -64,6 +64,8 @@ function makeContext(autoCompact, usedTokens) {
 
 async function run(autoCompact, usedTokens, sessionID, calls) {
   const { ctx, state } = makeContext(autoCompact, usedTokens)
+  state.tails = []
+  state.systemSizes = []
   await plugin.setup(ctx)
   if (!state.hook) throw new Error("the context hook was not registered")
   for (let index = 0; index < calls; index++) {
@@ -74,7 +76,9 @@ async function run(autoCompact, usedTokens, sessionID, calls) {
       system: [],
     }
     await state.hook(event)
-    state.systems.push(event.system.map((part) => part.text).join("\n"))
+    const last = event.messages[event.messages.length - 1]
+    state.tails.push(last?.content?.[0]?.text ?? "")
+    state.systemSizes.push(event.system.length)
   }
   return state
 }
@@ -88,26 +92,24 @@ check("autoCompact=true requests compaction", criticalOn.compactions.length, 1)
 check("autoCompact=true keeps one request per session", criticalOn.compactions[0], "ses_critical_on")
 check(
   "directive warns that compaction is lossy",
-  criticalOn.systems.some((text) => text.includes("compaction was requested, but it loses detail")),
+  criticalOn.tails.some((text) => text.includes("compaction was requested, but it loses detail")),
   true,
 )
-check(
-  "meter reports critical",
-  criticalOn.systems[0].includes("mode=critical"),
-  true,
-)
+check("meter travels in a trailing message", criticalOn.tails[0].includes("mode=critical"), true)
+check("system prompt stays untouched", criticalOn.systemSizes, [0, 0, 0])
 
 const criticalOff = await run(false, CRITICAL_USED, "ses_critical_off", 2)
 check("autoCompact=false never compacts", criticalOff.compactions.length, 0)
 check(
   "directive stays plain when off",
-  criticalOff.systems.some((text) => text.includes("compaction was requested")),
+  criticalOff.tails.some((text) => text.includes("compaction was requested")),
   false,
 )
 
 const belowThreshold = await run(true, NORMAL_USED, "ses_normal", 2)
 check("no compaction below the threshold", belowThreshold.compactions.length, 0)
-check("meter reports normal", belowThreshold.systems[0].includes("mode=normal"), true)
+check("meter reports normal", belowThreshold.tails[0].includes("mode=normal"), true)
+check("system prompt stays untouched below the threshold", belowThreshold.systemSizes, [0, 0])
 
 const log = readFileSync(join(work, ".opencode", "handoff", "budget.log"), "utf8")
 check("trace records the request", log.includes("compact requested ses_critical_on"), true)

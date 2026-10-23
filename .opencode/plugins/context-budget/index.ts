@@ -156,7 +156,17 @@ export default Plugin.define({
           reported.add(event.sessionID)
           trace(ctx.location.directory, line)
         }
-        event.system.push({ type: "text", text: line + (changed ? directive(mode, autoCompact) : "") })
+        const text = line + (changed ? directive(mode, autoCompact) : "")
+        // A trailing message leaves the system prompt byte-identical between
+        // requests, which is what prompt caching keys on: injecting into
+        // `event.system` dropped the cache hit rate from ~97% to ~2%
+        // (measured 2026-10-23 in a live session).
+        const outgoing: any[] = (event as any).messages
+        if (Array.isArray(outgoing)) {
+          outgoing.push({ role: "system", content: [{ type: "text", text }] })
+        } else {
+          event.system.push({ type: "text", text })
+        }
       } catch (error) {
         // A broken meter must never break the request.
         trace(ctx.location.directory, `error: ${String(error)}`)
