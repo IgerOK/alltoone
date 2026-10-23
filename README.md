@@ -34,6 +34,36 @@ pip install -e .
 alltoone .
 ```
 
+С GitHub — одной командой, после `git clone`:
+
+```bash
+git clone https://github.com/<ваш-логин>/alltoone
+cd alltoone
+
+# Windows
+.\scripts\install.ps1
+# Linux / macOS
+./scripts/install.sh
+```
+
+Скрипт проверяет версию Python, ставит пакет в режиме editable (дальше хватает
+`git pull`, переустанавливать не нужно) и печатает следующий шаг.
+
+### Развернуть handoff-цикл в своём проекте
+
+Тем же скриптом, с указанием папки проекта:
+
+```bash
+.\scripts\install.ps1 -Target D:\work\my-project
+./scripts/install.sh --target ~/work/my-project
+```
+
+Копируются `.opencode/plugins/context-budget`, `.opencode/commands/{handoff,resume}.md`,
+`AGENTS.md` и `opencode.jsonc`. Состояние (`.opencode/handoff/`) не копируется никогда —
+оно принадлежит конкретному проекту. Существующие файлы не перезаписываются без
+`-Force` / `--force`.
+
+
 ## Быстрый старт
 
 ```bash
