@@ -41,7 +41,8 @@ function makeContext(options, withPack = false) {
   const opts = typeof options === "boolean" ? { autoCompact: options } : (options ?? {})
   if (withPack) {
     mkdirSync(join(work, ".opencode", "handoff"), { recursive: true })
-    writeFileSync(join(work, ".opencode", "handoff", "pack.md"), "# Handoff state: test\n")
+    // Exactly 2 KB, so the pointer has a size to name.
+    writeFileSync(join(work, ".opencode", "handoff", "pack.md"), "# Handoff state: test\n" + "x".repeat(2028))
   }
   const ctx = {
     options: opts,
@@ -160,6 +161,12 @@ check(
   "autoResume stays quiet after the first request",
   resumeOn.tails[1].includes(".opencode/handoff/pack.md"),
   false,
+)
+check("the pointer names the pack size", resumeOn.tails[0].includes("(2 KB)"), true)
+check(
+  "the pointer asks for the rest of a truncated read",
+  resumeOn.tails[0].includes("`offset` until the end"),
+  true,
 )
 check("the pointer rides with the meter line", resumeOn.tails[0].includes("[budget]"), true)
 check("system prompt stays untouched with autoResume", resumeOn.systemSizes, [0, 0])

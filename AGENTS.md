@@ -34,7 +34,9 @@ and off by default: compaction is lossy, a new chat with `/resume` is not.
 `autoResume` is on in the shipped `opencode.jsonc`: it appends one pointer to
 `.opencode/handoff/pack.md` on the first request of a session, so a new chat in
 this workflow finds the pack without the user typing `/resume`. It is a pointer,
-not a read — the pack costs ~30k tokens and the model still decides. Turn it off
+not a read — the pack costs ~30k tokens and the model still decides. The pointer
+names the pack size and asks for the rest of a truncated read: a ~130 KB file
+does not fit one `read`, and a half-read pack is worse than none. Turn it off
 where a fresh chat is not a continuation.
 
 ## Handoff quality

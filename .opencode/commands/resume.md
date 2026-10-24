@@ -5,6 +5,10 @@ description: Restore work from the handoff pack in a new chat
 Read `.opencode/handoff/pack.md`. It contains the previous session's state
 first, then the project tree and the packed files.
 
+The pack is ~130 KB, which does not fit a single read: if the output is
+truncated, continue with `offset` until the end of the file before starting
+work. A half-read pack is worse than none.
+
 Then:
 
 1. Restate the goal, what is done, and the next step in at most 10 lines.

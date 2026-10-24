@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 
 import { Plugin } from "@opencode/plugin"
@@ -69,6 +69,17 @@ function directive(mode: Mode, autoCompact: boolean): string {
     )
   }
   return ""
+}
+
+/** Size of a file as it is shown to the model, "" when it cannot be read. */
+function fileSize(path: string): string {
+  try {
+    const bytes = statSync(path).size
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${Math.round(bytes / 1024)} KB`
+  } catch {
+    return ""
+  }
 }
 
 function trace(directory: string, text: string): void {
@@ -172,10 +183,14 @@ export default Plugin.define({
         let resume = ""
         if (autoResume && !resumed.has(event.sessionID) && existsSync(pack)) {
           resumed.add(event.sessionID)
+          // A 130 KB pack is truncated by the reader, and a half-read pack is
+          // worse than none: the pointer names the size and asks for passes.
+          const size = fileSize(pack)
           resume =
-            "\nA handoff pack is ready at `.opencode/handoff/pack.md`: read it first " +
-            "when work continues from a previous session."
-          trace(ctx.location.directory, `resume pointer ${event.sessionID}`)
+            `\nA handoff pack is ready at \`.opencode/handoff/pack.md\`${size ? ` (${size})` : ""}: ` +
+            "read it first when work continues from a previous session. It may not fit one read — " +
+            "continue with `offset` until the end before starting work."
+          trace(ctx.location.directory, `resume pointer ${event.sessionID}${size ? ` (${size})` : ""}`)
         }
         const text = line + (changed ? directive(mode, autoCompact) : "") + resume
         // A trailing message leaves the system prompt byte-identical between
