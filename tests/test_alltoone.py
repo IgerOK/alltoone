@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import re
 import shutil
+import sqlite3
 import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -595,6 +598,118 @@ class PluginBudgetTests(unittest.TestCase):
             timeout=120,
         )
         self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
+
+
+class UsageScriptTests(unittest.TestCase):
+    """The usage report reads an OpenCode V2 store; a fixture keeps it honest.
+
+    The store is an internal format, so the script must fail softly on a
+    mismatch and must never write: both are cheaper to test here than to find
+    out on a real database.
+    """
+
+    SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "usage.py"
+
+    def _store(self, root: Path, project: Path) -> Path:
+        db = root / "opencode.db"
+        con = sqlite3.connect(db)
+        con.executescript(
+            "create table session_v2 (id text primary key, directory text,"
+            " time_created integer, time_compacting integer);"
+            "create table session_message (id text primary key, session_id text,"
+            " type text, seq integer, data text);"
+        )
+        con.executemany(
+            "insert into session_v2 values (?, ?, ?, ?)",
+            [
+                ("ses_new", str(project), 2_000_000_000_000, None),
+                ("ses_old", str(project), 1_000_000_000_000, 1_234_567),
+            ],
+        )
+        pack = str(project / ".opencode" / "handoff" / "pack.md")
+        con.executemany(
+            "insert into session_message values (?, ?, ?, ?, ?)",
+            [
+                (
+                    "msg_new",
+                    "ses_new",
+                    "assistant",
+                    1,
+                    json.dumps(
+                        {
+                            "model": {"id": "m1"},
+                            "tokens": {"input": 100, "output": 10, "cache": {"read": 300, "write": 0}},
+                            "content": [
+                                {"type": "tool", "name": "read", "state": {"input": {"path": pack}}},
+                                {"type": "tool", "name": "read", "state": {"input": {"path": "a.py"}}},
+                            ],
+                        }
+                    ),
+                ),
+                (
+                    "msg_old",
+                    "ses_old",
+                    "assistant",
+                    1,
+                    json.dumps(
+                        {
+                            "model": {"id": "m1"},
+                            "tokens": {"input": 50, "output": 5, "cache": {"read": 50, "write": 0}},
+                            "content": [],
+                        }
+                    ),
+                ),
+            ],
+        )
+        con.commit()
+        con.close()
+        return db
+
+    def _run(self, *argv: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.SCRIPT), *argv],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+    def test_report_reads_the_store_without_writing_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "proj"
+            listing = project / ".opencode" / "handoff"
+            listing.mkdir(parents=True)
+            (listing / "files.txt").write_text("a.py\nb.py\n", encoding="utf-8")
+            db = self._store(root, project)
+            before = db.stat().st_mtime_ns
+
+            result = self._run("--db", str(db), "--project", str(project), "--sessions", "5")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            out = result.stdout
+            self.assertIn("75%", out)  # 300 of 400 prompt tokens from cache
+            self.assertIn("50%", out)  # 50 of 100 in the older session
+            self.assertIn("(compacted)", out)
+            self.assertIn(".opencode/handoff/pack.md", out)
+            self.assertIn("a.py", out)
+            self.assertIn("m1", out)
+            # Listed in files.txt and never opened in either session.
+            self.assertIn("b.py", out)
+            self.assertEqual(db.stat().st_mtime_ns, before)
+
+    def test_foreign_database_fails_softly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "empty.db"
+            sqlite3.connect(db).close()
+            result = self._run("--db", str(db))
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("schema may have changed", result.stderr)
+
+    def test_missing_database_is_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._run("--db", str(Path(tmp) / "nope.db"))
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("not found", result.stderr)
 
 
 class UnpackTests(unittest.TestCase):
