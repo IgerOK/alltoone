@@ -2,6 +2,10 @@
 *.sh text eol=lf
 *.ps1 text eol=crlf
 
+# The license is read outside an editor and travels into other repositories:
+# pin it to LF so a Windows checkout cannot turn it into CRLF.
+LICENSE text eol=lf
+
 # `git archive` is the install-only snapshot: development material stays out.
 .github/ export-ignore
 tests/ export-ignore

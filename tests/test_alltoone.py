@@ -937,6 +937,33 @@ class IntegrityTests(unittest.TestCase):
             self.assertEqual(result.written, ["a.txt"])
 
 
+class LicenseEncodingTests(unittest.TestCase):
+    """The license is read outside an editor and copied into other projects.
+
+    A BOM or CRLF is invisible in this repository and only shows up on GitHub,
+    in a console or in a snapshot taken on another OS, so the bytes are part of
+    what ships, not a formatting preference.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+
+    def test_license_is_utf8_with_unix_line_endings(self):
+        raw = (self.ROOT / "LICENSE").read_bytes()
+        self.assertFalse(raw.startswith(b"\xef\xbb\xbf"), "LICENSE must not start with a BOM")
+        self.assertNotIn(b"\r", raw, "LICENSE must use LF line endings")
+        self.assertTrue(raw.endswith(b"\n"), "LICENSE must end with a newline")
+
+        text = raw.decode("utf-8")
+        self.assertIn("MIT License", text)
+        self.assertIn("Русский", text)
+
+    def test_gitattributes_pins_the_license_to_lf(self):
+        # The working tree is not enough: a checkout with autocrlf would rewrite
+        # the file, and without the rule nothing in git says which ending wins.
+        rules = (self.ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+        self.assertIn("LICENSE text eol=lf", rules)
+
+
 class InstallTests(unittest.TestCase):
     """The installers are the only path an outsider has to the workflow.
 
