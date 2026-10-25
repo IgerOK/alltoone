@@ -29,6 +29,10 @@ DEFAULT_OUTPUT = f"{HANDOFF_DIR}/pack.md"
 # the contract, so the tool checks them instead of trusting the agent.
 REQUIRED_SECTIONS = ("Goal", "Done", "Next", "Decisions", "Open questions", "Files", "Commands")
 MAX_STATE_LINES = 60
+# The 60-line limit is the hard stop. A long Decisions list is the usual way to
+# reach it, and it pushes out Next and Files long before the limit trips, so it
+# is flagged early instead of silently eating the briefing.
+MAX_DECISIONS = 8
 
 
 def _read_list(path: Path) -> list[str]:
@@ -88,6 +92,34 @@ def check_state(state: Path) -> list[str]:
     if empty:
         problems.append("state: empty sections: " + ", ".join(empty))
     return problems
+
+
+def _bullets(lines: list[str], section: str) -> int:
+    """Count top-level ``-`` bullets in one section, ignoring fenced code."""
+    count = 0
+    current: str | None = None
+    fenced = False
+    for line in lines:
+        if line.strip().startswith("```"):
+            fenced = not fenced
+            continue
+        if not fenced and line.startswith("## "):
+            current = line[3:].strip()
+            continue
+        if current == section and not fenced and line.startswith("- "):
+            count += 1
+    return count
+
+
+def warn_state(state: Path) -> list[str]:
+    """Return soft warnings: the state is usable, but will not stay so."""
+    if not state.is_file():
+        return []
+    lines = state.read_text(encoding="utf-8-sig").splitlines()
+    decisions = _bullets(lines, "Decisions")
+    if decisions > MAX_DECISIONS:
+        return [f"state: {decisions} decisions, keep the active ones to {MAX_DECISIONS}; fold the rest"]
+    return []
 
 
 def _check_files(root: Path, files_from: Path, state: Path | None) -> list[str]:
@@ -254,6 +286,8 @@ def handoff_main(argv: list[str]) -> int:
             print(f"  files    {files_from}", file=sys.stderr)
         for problem in problems:
             print(f"  - {problem}", file=sys.stderr)
+        for warning in warn_state(state):
+            print(f"  ! {warning}", file=sys.stderr)
         if problems:
             return 1
         if not args.quiet:
@@ -287,6 +321,9 @@ def handoff_main(argv: list[str]) -> int:
                 f"({hints[0]}); run `python -m alltoone handoff --check`",
                 file=sys.stderr,
             )
+        else:
+            for warning in warn_state(state):
+                print(f"warning: {warning}", file=sys.stderr)
         print("alltoone handoff", file=sys.stderr)
         print(f"  state    {state if state.is_file() else '(none)'}", file=sys.stderr)
         print(f"  files    {files_from if files_from.is_file() else '(all collected)'}", file=sys.stderr)

@@ -486,6 +486,19 @@ Continue the work.
             self.assertEqual(code, 1)
             self.assertIn("missing sections: Decisions", stderr)
 
+    def test_check_warns_about_a_long_decisions_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "b.py").write_text("print('b')\n", encoding="utf-8")
+            bloated = self.GOOD_STATE.replace(
+                "## Decisions\n", "## Decisions\n" + "- extra decision\n" * 8
+            )
+            code, stderr = self._check(root, "b.py\n", state=bloated)
+            # A long Decisions list is a warning, not a failure: the state still works.
+            self.assertEqual(code, 0)
+            self.assertIn("9 decisions", stderr)
+            self.assertIn("  ! ", stderr)
+
     def test_check_reports_bad_paths_and_duplicates(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

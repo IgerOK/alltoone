@@ -13,8 +13,10 @@ parts/
 demo/
 *.part1.md
 
-# OpenCode handoff state (generated per session)
-.opencode/handoff/
+# OpenCode handoff: the state and the file list are project memory and are
+# tracked; the pack and the meter log are derived from them and are not.
+.opencode/handoff/pack.md
+.opencode/handoff/budget.log
 
 # OS / editors
 .DS_Store
