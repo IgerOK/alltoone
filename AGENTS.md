@@ -34,10 +34,9 @@ and off by default: compaction is lossy, a new chat with `/resume` is not.
 `autoResume` is on in the shipped `opencode.jsonc`: it appends one pointer to
 `.opencode/handoff/pack.md` on the first request of a session, so a new chat in
 this workflow finds the pack without the user typing `/resume`. It is a pointer,
-not a read — the pack costs ~30k tokens and the model still decides. The pointer
-names the pack size and asks for the rest of a truncated read: a ~130 KB file
-does not fit one `read`, and a half-read pack is worse than none. Turn it off
-where a fresh chat is not a continuation.
+not a read: the pack costs ~30k tokens and the model still decides. The pointer
+names the pack size and asks for the rest of a truncated read. Turn it off where
+a fresh chat is not a continuation.
 
 ## Handoff quality
 
@@ -97,6 +96,21 @@ Answer in the language of the user's latest message. `/resume` and `/handoff`
 carry no language of their own: continue in the language recorded in the
 state's Decisions (for example `Working language: Russian`), and switch only
 when the user does.
+
+## Skills
+
+A skill is earned, never invented: it exists only for a failure that repeated and
+whose error message did not contain the answer.
+
+- Before a third attempt at the same call failing the same way, read the catalog in
+  `.opencode/skills/` — the recipe may already be there.
+- Once it is solved, write the skill at that moment, while the working command is
+  still exact: `.opencode/skills/<slug>/SKILL.md`, shaped by `skill-template.md`.
+- Not a skill: what the error text already says, a one-off environment blip, a guess
+  that happened to work. Those belong in `STATE.md`.
+- One file per symptom, not per episode: when a case repeats, edit the skill. The
+  description starts with the symptom because that is what the next session matches
+  against, and every description rides in every request — 12 skills is the limit.
 
 ## Verification
 

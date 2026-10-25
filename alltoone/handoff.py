@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .collector import collect
 from .render import Meta, build_tree, render
+from .skills import check_skills
 from .tokens import human_bytes
 
 HANDOFF_DIR = ".opencode/handoff"
@@ -162,6 +163,7 @@ def check_handoff(root: Path, *, state: Path | None = None, files_from: Path | N
     """Return every problem that would make the next session start blind."""
     root = root.resolve()
     problems = check_state(state) if state is not None else []
+    problems.extend(check_skills(root))
     if files_from is None:
         problems.append("files: no file list")
         return problems
@@ -253,7 +255,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="validate the state and the file list, write nothing (exit 1 on problems)",
+        help="validate the state, the file list and the skills, write nothing (exit 1 on problems)",
     )
     parser.add_argument("-q", "--quiet", action="store_true", help="do not print the summary")
     return parser
@@ -319,6 +321,13 @@ def handoff_main(argv: list[str]) -> int:
             print(
                 "warning: STATE.md does not follow the schema "
                 f"({hints[0]}); run `python -m alltoone handoff --check`",
+                file=sys.stderr,
+            )
+        skill_hints = check_skills(root)
+        if skill_hints:
+            print(
+                "warning: the skill catalog does not follow the schema "
+                f"({skill_hints[0]}); run `python -m alltoone handoff --check`",
                 file=sys.stderr,
             )
         else:

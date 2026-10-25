@@ -87,6 +87,7 @@ class Session:
     pack_reads: int = 0
     tools: Counter = field(default_factory=Counter)
     reads: Counter = field(default_factory=Counter)
+    errors: Counter = field(default_factory=Counter)
 
     @property
     def hit(self) -> float:
@@ -152,6 +153,13 @@ def _message(message: dict, session: Session, models: dict[str, Model]) -> None:
             continue
         name = part.get("name") or "?"
         session.tools[name] += 1
+        # A tool that failed is a skill candidate, but only a candidate: the
+        # error text decides whether the failure taught anything (see AGENTS.md).
+        state = part.get("state") or {}
+        if state.get("status") == "error":
+            error = state.get("error")
+            message = error.get("message") if isinstance(error, dict) else str(error or "")
+            session.errors[f"{name}: {str(message).strip()}"] += 1
         if name != "read":
             continue
         target = ((part.get("state") or {}).get("input") or {}).get("path")
@@ -202,7 +210,18 @@ def packed_not_read(sessions: list[Session], project: Path) -> list[str]:
     return [path for path in wanted if path not in read]
 
 
-def render(sessions: list[Session], models: dict[str, Model], unused: list[str], db: Path) -> str:
+def skill_names(project: Path) -> list[str]:
+    """Slugs of the project's earned skills, newest convention first-class."""
+    return sorted(path.parent.name for path in (project / ".opencode" / "skills").glob("*/SKILL.md"))
+
+
+def render(
+    sessions: list[Session],
+    models: dict[str, Model],
+    unused: list[str],
+    db: Path,
+    skills: list[str] | None = None,
+) -> str:
     """Format the report as fixed-width text."""
     out: list[str] = [f"usage from {db} (read-only)", ""]
 
@@ -244,6 +263,19 @@ def render(sessions: list[Session], models: dict[str, Model], unused: list[str],
     if unused:
         out.extend(["", "listed in files.txt, never read in these sessions"])
         out.extend(f"  {path}" for path in unused)
+
+    errors: Counter = Counter()
+    for session in sessions:
+        errors.update(session.errors)
+    if errors:
+        # Grouped by message, not by session: a message that repeats is the
+        # signature of a failure worth writing down.
+        out.extend(["", "tool errors (a repeated one is a skill candidate)"])
+        for line, count in errors.most_common(8):
+            out.append(f"  {count:>3}  {line[:110]}")
+
+    if skills:
+        out.extend(["", f"skills ({len(skills)}): " + ", ".join(skills)])
 
     return "\n".join(out) + "\n"
 
@@ -288,7 +320,8 @@ def main(argv: list[str] | None = None) -> int:
         con.close()
 
     unused = packed_not_read(sessions, Path(args.project).expanduser())
-    print(render(sessions, models, unused, db), end="")
+    skills = skill_names(Path(args.project).expanduser())
+    print(render(sessions, models, unused, db, skills), end="")
     return 0
 
 

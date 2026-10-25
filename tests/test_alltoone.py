@@ -17,6 +17,7 @@ from alltoone.cli import main
 from alltoone.collector import FileEntry, collect, decode_text, looks_binary
 from alltoone.ignore import IgnoreMatcher, compile_globs, compile_pattern
 from alltoone.render import Meta, build_tree, language_for, render, split_entries
+from alltoone.skills import check_skills
 from alltoone.tokens import estimate_tokens, human_bytes, human_tokens
 from alltoone.unpack import UnpackError, detect_format, parse, safe_target, unpack
 
@@ -655,6 +656,17 @@ class UsageScriptTests(unittest.TestCase):
                             "content": [
                                 {"type": "tool", "name": "read", "state": {"input": {"path": pack}}},
                                 {"type": "tool", "name": "read", "state": {"input": {"path": "a.py"}}},
+                                {
+                                    "type": "tool",
+                                    "name": "edit",
+                                    "state": {
+                                        "status": "error",
+                                        "error": {
+                                            "type": "tool.execution",
+                                            "message": "No changes to apply",
+                                        },
+                                    },
+                                },
                             ],
                         }
                     ),
@@ -709,6 +721,23 @@ class UsageScriptTests(unittest.TestCase):
             # Listed in files.txt and never opened in either session.
             self.assertIn("b.py", out)
             self.assertEqual(db.stat().st_mtime_ns, before)
+
+    def test_tool_errors_and_skills_are_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "proj"
+            (project / ".opencode" / "handoff").mkdir(parents=True)
+            skill = project / ".opencode" / "skills" / "demo" / "SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text("---\nname: demo\n---\n", encoding="utf-8")
+            db = self._store(root, project)
+
+            result = self._run("--db", str(db), "--project", str(project))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("tool errors", result.stdout)
+            self.assertIn("edit: No changes to apply", result.stdout)
+            self.assertIn("skills (1): demo", result.stdout)
 
     def test_foreign_database_fails_softly(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -906,6 +935,126 @@ class IntegrityTests(unittest.TestCase):
             result = unpack(document, Path(tmp))
             self.assertFalse(result.verified)
             self.assertEqual(result.written, ["a.txt"])
+
+
+class SkillsTests(unittest.TestCase):
+    """A learned skill is cheap to write and expensive to trust.
+
+    The checks are the trust: a catalog whose descriptions do not read as
+    symptoms is a catalog the next session never finds.
+    """
+
+    GOOD = """---
+name: demo
+description: `shell` fails with `boom` — run the probe before the real call
+---
+
+# shell fails with boom
+
+## Cause
+A demo cause.
+
+## Recipe
+```powershell
+echo ok
+```
+
+## Proof
+`ses_demo` — exit 0.
+"""
+
+    def _skill(self, root: Path, slug: str, text: str) -> Path:
+        path = root / ".opencode" / "skills" / slug / "SKILL.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_no_skills_directory_is_fine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(check_skills(Path(tmp)), [])
+
+    def test_a_good_skill_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._skill(root, "demo", self.GOOD)
+            self.assertEqual(check_skills(root), [])
+
+    def test_missing_frontmatter_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._skill(root, "demo", "---\nname: demo\n")
+            problems = check_skills(root)
+            self.assertTrue(any("frontmatter" in problem for problem in problems), problems)
+
+    def test_topic_description_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            broken = self.GOOD.replace(
+                "description: `shell` fails with `boom` — run the probe before the real call",
+                "description: Working with the shell tool in PowerShell",
+            )
+            self._skill(root, "demo", broken)
+            problems = check_skills(root)
+            self.assertTrue(any("symptom" in problem for problem in problems), problems)
+
+    def test_name_must_match_the_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._skill(root, "demo", self.GOOD.replace("name: demo", "name: other"))
+            problems = check_skills(root)
+            self.assertTrue(any("must match the directory" in problem for problem in problems), problems)
+
+    def test_missing_proof_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._skill(root, "demo", self.GOOD.split("## Proof")[0])
+            problems = check_skills(root)
+            self.assertTrue(any("Proof" in problem for problem in problems), problems)
+
+    def test_long_skill_and_duplicate_description_are_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._skill(root, "demo", self.GOOD + "\nfiller\n" * 60)
+            twin = self.GOOD.replace("name: demo", "name: twin")
+            self._skill(root, "twin", twin)
+            problems = check_skills(root)
+            self.assertTrue(any("limit 50" in problem for problem in problems), problems)
+            self.assertTrue(any("duplicates" in problem for problem in problems), problems)
+
+    def test_the_catalog_is_capped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for index in range(13):
+                slug = f"s{index}"
+                text = self.GOOD.replace("name: demo", f"name: {slug}").replace(
+                    "`shell` fails with `boom`", f"`shell` fails with `boom{index}`"
+                )
+                self._skill(root, slug, text)
+            problems = check_skills(root)
+            self.assertTrue(any("limit 12" in problem for problem in problems), problems)
+
+    def test_handoff_check_reports_a_bad_skill_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("print('a')\n", encoding="utf-8")
+            listing = root / ".opencode" / "handoff"
+            listing.mkdir(parents=True)
+            (listing / "STATE.md").write_text(HandoffTests.GOOD_STATE, encoding="utf-8")
+            (listing / "files.txt").write_text("a.py\n", encoding="utf-8")
+            self._skill(root, "demo", self.GOOD.replace("name: demo", "name: wrong"))
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main(["handoff", str(root), "--check"])
+            self.assertEqual(code, 1)
+            self.assertIn("skills:", stderr.getvalue())
+            self.assertFalse((listing / "pack.md").exists())
+
+    def test_the_agreement_stays_within_its_budget(self):
+        # Every rule in AGENTS.md is paid for in every request; a self-improving
+        # agent grows it silently unless the budget is a test.
+        agreement = Path(__file__).resolve().parents[1] / "AGENTS.md"
+        self.assertLessEqual(len(agreement.read_text(encoding="utf-8").splitlines()), 120)
 
 
 if __name__ == "__main__":
