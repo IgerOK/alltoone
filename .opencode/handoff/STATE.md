@@ -24,7 +24,8 @@ One file carries state, map and files, so a new chat continues without history; 
   `cli.py`/`README.md`/`render.py` were read only in one pre-trim session (10-23); nothing since.
 
 ## Next
-1. `agnes-3.0-flash` is unavailable now (user, 2026-10-24); revisit when it appears — tool calls first.
+1. Start from the user's next request: 0.5.6 is shipped and the pack is current.
+2. Next long session, `python scripts/usage.py`: cache ≥90%, no packed file unread; else trim `files.txt`.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
@@ -40,6 +41,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - Plugin: options need the `plugins` entry (one instance); logic is tested through node, no TS toolchain, zero runtime deps.
 
 ## Open questions
+- Parked, do not raise: `agnes-3.0-flash` — the user drops it until they can use it (2026-10-25).
 - Does `input` exclude cached tokens for every provider? Here yes; `max()` is a safe guess, not a rule.
 - Plugin API is V2; a desktop update may break `session.hook("context")`.
 
