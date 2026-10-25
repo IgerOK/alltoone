@@ -14,8 +14,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - `scripts/usage.py`: read-only report — cache, pack reads, unread files, tool errors, skills; 4 tests.
 - `files.txt` trimmed to the 9 files the next step needs: `AGENTS.md` is injected every request,
   `README.md`/`cli.py`/`render.py`/`handoff.md` were never read. Pack 130 → 84 KB.
-- Memory is tracked in git: `.gitignore` ignores only `pack.md`/`budget.log`; `--check` warns above
-  8 decisions (soft, exit 0). Ideas from `IgerOK/allToOne-setup`.
+- Memory in git: `pack.md`/`budget.log` are ignored; `--check` warns above 8 decisions (soft). Ideas from `IgerOK/allToOne-setup`.
 - Release prep: MIT `LICENSE`+RU, `scripts/install.ps1|sh`, CI ubuntu/windows 3.10/3.13, `.gitattributes`;
   77 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 - Measured 2026-10-25: pack 86 KB, 92% cache, 2 reads; the three stragglers were one pre-trim session.
@@ -33,8 +32,9 @@ One file carries state, map and files, so a new chat continues without history; 
   `session_message.tokens`; thresholds 70/85/92.
 - `files.txt` carries only what the next step needs; `AGENTS.md` is never packed — it is in every request.
   `cli.py`/`README.md`/`render.py` stay out: their reads were one pre-trim session, not a standing need.
-- A skill is earned, not invented: a repeated failure whose error text did not contain the answer. The
-  description names the symptom (it is matched against an error); 12 skills max, a test holds the format.
+- A skill is earned, not invented: a repeated failure whose error text did not contain the answer;
+  the description names the symptom, 12 skills max, tests hold it. No automatic writer: `shell`
+  failures carry no error status, so the trigger stays in-session (user, 2026-10-25).
 - Working language: Russian; local git only, commit each change, no remote until asked; `STATE.md` and
   `files.txt` are tracked, `pack.md`/`budget.log` are derived and ignored.
 - Plugin: options need the `plugins` entry (one instance); logic is tested through node, no TS toolchain, zero runtime deps.
