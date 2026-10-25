@@ -20,12 +20,11 @@ One file carries state, map and files, so a new chat continues without history; 
   8 decisions (soft, exit 0). 2 tests. Ideas taken from `IgerOK/allToOne-setup`.
 - Release prep: MIT `LICENSE` + RU translation, `scripts/install.ps1|.sh`, CI ubuntu/windows
   3.10/3.13, `.gitattributes`; 66 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
-- Measured after the trim 2026-10-25: pack 86 KB, 2 reads, 92% cache in the resume session;
-  `cli.py`, `README.md`, `render.py` are still read from disk outside the pack.
+- Measured after the trim 2026-10-25: pack 86 KB, 2 reads, 92% cache in the resume session.
+  `cli.py`/`README.md`/`render.py` were read only in one pre-trim session (10-23); nothing since.
 
 ## Next
-1. Decide on the three stragglers: re-add `cli.py`/`README.md`/`render.py` to `files.txt`, or read them once and record the answer in STATE.
-2. `agnes-3.0-flash` is unavailable now (user, 2026-10-24); revisit when it appears — tool calls first.
+1. `agnes-3.0-flash` is unavailable now (user, 2026-10-24); revisit when it appears — tool calls first.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
@@ -35,6 +34,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - `usageTotal` is `max(input, input+read+write)`; cache hit is `read / (input + read)` from
   `session_message.tokens`; thresholds 70/85/92.
 - `files.txt` carries only what the next step needs; `AGENTS.md` is never packed — it is in every request.
+  `cli.py`/`README.md`/`render.py` stay out: their reads were one pre-trim session, not a standing need.
 - Memory in git: `STATE.md` and `files.txt` are tracked, `pack.md` and `budget.log` are derived and ignored.
 - Working language: Russian; local git only — commit each change, no remote until asked.
 - Plugin: options need the `plugins` entry (one instance); logic is tested through node, no TS toolchain, zero runtime deps.
