@@ -20,8 +20,8 @@ One file carries state, map and files, so a new chat continues without history; 
 - Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
-1. Project accepted as final on 2026-10-25: 0.5.6 is the last version, `main` and tag `v0.5.6` are pushed, CI is green.
-2. No active work. Only on request: a GitHub Release from `v0.5.6` or a PyPI upload — neither exists yet.
+1. Verified 2026-10-25: E2E pack→unpack byte-identical, handoff→unpack without `--format`, `--check` 0/1, install/uninstall smoke — all green.
+2. Release only on request: GitHub Release from tag `v0.5.6`. Live stats: cache hit 91% over 925 requests, pack read 19×.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
