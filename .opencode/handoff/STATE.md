@@ -20,9 +20,11 @@ One file carries state, map and files, so a new chat continues without history; 
   8 decisions (soft, exit 0). 2 tests. Ideas taken from `IgerOK/allToOne-setup`.
 - Release prep: MIT `LICENSE` + RU translation, `scripts/install.ps1|.sh`, CI ubuntu/windows
   3.10/3.13, `.gitattributes`; 66 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
+- Measured after the trim 2026-10-25: pack 86 KB, 2 reads, 92% cache in the resume session;
+  `cli.py`, `README.md`, `render.py` are still read from disk outside the pack.
 
 ## Next
-1. Measure after the trim: `python scripts/usage.py` — pack reads should drop; a file needed from outside the pack goes into STATE.
+1. Decide on the three stragglers: re-add `cli.py`/`README.md`/`render.py` to `files.txt`, or read them once and record the answer in STATE.
 2. `agnes-3.0-flash` is unavailable now (user, 2026-10-24); revisit when it appears — tool calls first.
 
 ## Decisions
