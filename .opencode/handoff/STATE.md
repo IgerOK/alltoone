@@ -17,7 +17,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - `scripts/usage.py`: read-only report — cache, pack reads, unread files, tool errors, skills; 4 tests.
 - `files.txt` = the 9 files the next step needs; `AGENTS.md` is injected, `README.md`/`cli.py`/`render.py`/`handoff.md` were never read. Pack 130 → 84 KB.
 - Memory in git: `pack.md`/`budget.log` are ignored; `--check` warns above 8 decisions (soft). Ideas from `IgerOK/allToOne-setup`.
-- Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (0.1 = original, never published; current 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
+- Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
 1. No active task: 0.5.6 shipped, uninstall and the install-only snapshot are in place; license is UTF-8/LF.
