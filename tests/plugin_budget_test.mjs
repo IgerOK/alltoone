@@ -20,6 +20,20 @@ const STUB = "const Plugin = { define: (definition) => definition }"
 
 const text = readFileSync(source, "utf8")
 if (!text.includes(IMPORT)) throw new Error(`import line not found in ${source}`)
+
+// The stub file is TypeScript (.mts), which Node only imports from 23.6 on
+// (22.6 behind --experimental-strip-types). Exit 2, not 1: an old runtime is
+// "cannot run here", not "the plugin is broken", and the Python wrapper turns
+// it into a skip.
+const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number)
+if (nodeMajor < 23 || (nodeMajor === 23 && nodeMinor < 6)) {
+  console.error(
+    `node ${process.versions.node} cannot import TypeScript; ` +
+      "23.6+ is required (22.6+ with --experimental-strip-types)",
+  )
+  process.exit(2)
+}
+
 const work = mkdtempSync(join(tmpdir(), "budget-test-"))
 const modulePath = join(work, "plugin.mts")
 writeFileSync(modulePath, text.replace(IMPORT, STUB))

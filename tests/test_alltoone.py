@@ -611,6 +611,10 @@ class PluginBudgetTests(unittest.TestCase):
             text=True,
             timeout=120,
         )
+        # The harness exits 2 when the runtime cannot import TypeScript at all;
+        # that is a machine limitation, not a plugin failure.
+        if result.returncode == 2:
+            self.skipTest(result.stderr.strip() or "node cannot import TypeScript")
         self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
 
 

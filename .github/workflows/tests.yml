@@ -19,7 +19,8 @@ jobs:
           python-version: ${{ matrix.python }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # The plugin harness imports TypeScript, which needs node 23.6+.
+          node-version: "24"
       - name: Python suite
         run: python -m unittest discover -s tests -v
       - name: Plugin checks

@@ -20,8 +20,8 @@ One file carries state, map and files, so a new chat continues without history; 
 - Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
-1. Pushed 2026-10-25: `origin` = https://github.com/IgerOK/alltoone, branch `main`, tag `v0.5.6`; CI runs on every push.
-2. Next: watch the first CI run on GitHub; `git archive` snapshot only when a release zip is needed.
+1. Pushed 2026-10-25: `origin` = https://github.com/IgerOK/alltoone, branch `main`, tag `v0.5.6`.
+2. CI run 1 failed on node 20 (`ERR_UNKNOWN_FILE_EXTENSION .mts`); fixed locally: node 24 in `tests.yml`, harness exits 2 on old node, test skips. Commit + push, then watch the run.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.

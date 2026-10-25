@@ -695,6 +695,10 @@ python -m alltoone unpack context.md -o app/ --no-verify   # распакова�
 python -m unittest discover -s tests -v
 ```
 
+Проверки плагина запускаются из питоновских тестов через `node` и требуют
+Node 23.6+ (или 22.6+ с `--experimental-strip-types`): стенд импортирует
+TypeScript. На более старом Node тест пропускается с сообщением, а не падает.
+
 ## Статистика использования
 
 `python scripts/usage.py` — read-only отчёт по базе OpenCode (`opencode.db`): кэш
