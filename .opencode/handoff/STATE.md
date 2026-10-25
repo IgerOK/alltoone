@@ -20,8 +20,8 @@ One file carries state, map and files, so a new chat continues without history; 
 - Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
-1. Verified 2026-10-25: E2E pack→unpack byte-identical, handoff→unpack without `--format`, `--check` 0/1, install/uninstall smoke — all green.
-2. Released 2026-10-25: GitHub Release `v0.5.6` — https://github.com/IgerOK/alltoone/releases/tag/v0.5.6 (latest, notes from README + verification).
+1. Nothing pending: v0.5.6 is final, released 2026-10-25 (https://github.com/IgerOK/alltoone/releases/tag/v0.5.6); E2E pack→unpack, `--check` 0/1, install/uninstall smoke — all green.
+2. On a new scope from the user, start from `## Files` below; keep 84 tests + 28 node checks green.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
