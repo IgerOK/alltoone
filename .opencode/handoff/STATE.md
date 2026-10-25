@@ -20,8 +20,8 @@ One file carries state, map and files, so a new chat continues without history; 
 - Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
-1. Pushed 2026-10-25: `origin` = https://github.com/IgerOK/alltoone, branch `main`, tag `v0.5.6`; CI run 3 (0920990) green on ubuntu+windows, 3.10/3.13.
-2. Next: nothing pending; `git archive` snapshot only when a release zip is needed (RELEASING.md). Node 23.6+ runs the plugin harness, older skips.
+1. Project accepted as final on 2026-10-25: 0.5.6 is the last version, `main` and tag `v0.5.6` are pushed, CI is green.
+2. No active work. Only on request: a GitHub Release from `v0.5.6` or a PyPI upload — neither exists yet.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
