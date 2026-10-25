@@ -962,6 +962,24 @@ class InstallTests(unittest.TestCase):
     def test_both_installers_ship_the_same_workflow(self):
         self.assertEqual(self._ps1(), self._sh())
 
+    def _uninstall_ps1(self) -> list[str]:
+        text = (self.ROOT / "scripts" / "uninstall.ps1").read_text(encoding="utf-8")
+        start = text.index("$files = @(")
+        end = text.index(")", start)
+        return [path.replace("\\", "/") for path in re.findall(r'"([^"]+)"', text[start:end])]
+
+    def _uninstall_sh(self) -> list[str]:
+        text = (self.ROOT / "scripts" / "uninstall.sh").read_text(encoding="utf-8")
+        start = text.index("for rel in")
+        end = text.index("; do", start)
+        return [path.replace("\\", "/") for path in re.findall(r'"([^"]+)"', text[start:end])]
+
+    def test_uninstall_removes_exactly_what_install_places(self):
+        # A file installed but never uninstalled is the worst of both: the user
+        # thinks the project is clean and the plugin still runs.
+        self.assertEqual(self._uninstall_ps1(), self._ps1())
+        self.assertEqual(self._uninstall_sh(), self._sh())
+
     def test_every_shipped_path_exists(self):
         shipped = self._sh()
         self.assertTrue(shipped)

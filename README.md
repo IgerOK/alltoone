@@ -166,6 +166,31 @@ alltoone .
 пакет не включатся.
 
 
+## Удаление
+
+Установщик оставляет ровно известный набор файлов, поэтому удаление — точное, а не
+«снести папку целиком»:
+
+```powershell
+# Windows: только пакет
+.\scripts\uninstall.ps1
+# Windows: плюс workflow из проекта
+.\scripts\uninstall.ps1 -Target D:\work\my-project
+# Windows: плюс состояние и пакет (.opencode/handoff)
+.\scripts\uninstall.ps1 -Target D:\work\my-project -Purge
+```
+
+```bash
+./scripts/uninstall.sh --target ~/work/my-project          # без состояния
+./scripts/uninstall.sh --target ~/work/my-project --purge   # и состояние тоже
+```
+
+Что важно: файл, который вы правили после установки (`AGENTS.md`, `opencode.jsonc`),
+**не удаляется** — скрипт видит, что он отличается от поставляемого, и оставляет его
+(удалить принудительно: `-Force` / `--force`). Личные навыки в `.opencode/skills/`
+тоже остаются; `--purge` дополнительно убирает `.opencode/handoff/` — историю
+передачи, которую вы, возможно, хотите сохранить. Код проекта не трогается никогда.
+
 ## Быстрый старт
 
 ```bash

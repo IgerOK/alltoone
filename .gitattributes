@@ -1,3 +1,11 @@
 # Shell scripts must keep LF endings to stay runnable after a checkout on any OS.
 *.sh text eol=lf
 *.ps1 text eol=crlf
+
+# `git archive` is the install-only snapshot: development material stays out.
+.github/ export-ignore
+tests/ export-ignore
+RELEASING.md export-ignore
+scripts/usage.py export-ignore
+.opencode/handoff/ export-ignore
+.opencode/skills/powershell-native-stderr/ export-ignore

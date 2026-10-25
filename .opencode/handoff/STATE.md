@@ -11,17 +11,17 @@ One file carries state, map and files, so a new chat continues without history; 
 - `autoResume` on: one pointer per session naming the pack size and asking for the rest of a truncated read; cache 93–99% after request 4 (live 2026-10-24).
 - Skills are earned: `.opencode/skills/powershell-native-stderr/` (first, verified) + `skill-template.md`,
   `alltoone/skills.py` checks the format, `usage.py` lists repeated tool errors as candidates.
-- Outsider path: installers ship the skill template too (parity test), README covers skills/`--check`
-  and maps non-OpenCode use (chat, Cursor/Copilot/Claude Code), `RELEASING.md` has the release checklist;
-  nothing is published — no remote, no PyPI.
+- Outsider path: installers ship the skill template (parity test), README covers skills, non-OpenCode use
+  and uninstall; `RELEASING.md` = release + install-only snapshot; nothing is published yet.
+- Uninstall (`scripts/uninstall.ps1|sh`): removes exactly the installed set, keeps files changed since install, `-Force`/`--purge`.
 - `scripts/usage.py`: read-only report — cache, pack reads, unread files, tool errors, skills; 4 tests.
 - `files.txt` = the 9 files the next step needs; `AGENTS.md` is injected, `README.md`/`cli.py`/`render.py`/`handoff.md` were never read. Pack 130 → 84 KB.
 - Memory in git: `pack.md`/`budget.log` are ignored; `--check` warns above 8 decisions (soft). Ideas from `IgerOK/allToOne-setup`.
 - Release prep: MIT `LICENSE`+RU, `scripts/install.ps1|sh`, CI ubuntu/windows 3.10/3.13, `.gitattributes`; 81 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
-1. Start from the user's next request: 0.5.6 is shipped and the pack is current.
-2. Next long session, `python scripts/usage.py`: cache ≥90%, no packed file unread; else trim `files.txt`.
+1. No active task: 0.5.6 shipped, uninstall and the install-only snapshot are in place.
+2. Push on request only: `git remote add origin <url>`, then the `git archive` snapshot from RELEASING.md.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
@@ -54,7 +54,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - `AGENTS.md`: the agreement; `README.md`: user docs; `RELEASING.md`: release checklist; `scripts/install.ps1|sh`: what travels.
 
 ## Commands
-- `python -m unittest discover -s tests`: 81 tests; `node tests/plugin_budget_test.mjs`: 28 checks.
+- `python -m unittest discover -s tests`: 82 tests; `node tests/plugin_budget_test.mjs`: 28 checks.
 - `python scripts/usage.py`: cache, pack reads, unused packed files, tool errors, skills.
 - `python -m alltoone handoff --check` / `python -m alltoone handoff`.
 - `git add .opencode/handoff`: memory is tracked, so it is committed with the change.

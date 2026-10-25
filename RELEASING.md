@@ -27,7 +27,26 @@
   и пройти цикл `/handoff` → новый чат → `/resume`. Тест установщиков проверяет
   только состав файлов, а не сам прогон.
 
-## Что не публикуется
+## Публичный набор (только установка)
+
+На GitHub должен уехать не рабочий репозиторий, а то, что нужно новому
+пользователю. Набор задан в `.gitattributes` через `export-ignore`, поэтому
+собирается одной командой:
+
+```bash
+git archive --format=zip --prefix=alltoone/ HEAD -o alltoone.zip
+```
+
+Внутри: `alltoone/`, `scripts/` (кроме `usage.py`), `.opencode/` (плагин, команды,
+шаблон навыка), `AGENTS.md`, `README.md`, `LICENSE`, `opencode.jsonc`,
+`pyproject.toml`, `.gitignore`, `.gitattributes`.
+
+Не входит: `tests/`, `.github/`, `RELEASING.md`, `scripts/usage.py`,
+`.opencode/handoff/` (личное состояние), `.opencode/skills/*/SKILL.md`
+(заработанные навыки). Проверка: `git archive ... | tar -t` не должен показывать
+эти пути.
+
+Что не публикуется
 
 - `.opencode/handoff/` — состояние конкретной сессии; установщик его не копирует.
 - `.opencode/skills/*/SKILL.md` — заработанные навыки с локальными путями и id
