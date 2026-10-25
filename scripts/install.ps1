@@ -59,6 +59,7 @@ $files = @(
     ".opencode\plugins\context-budget",
     ".opencode\commands\handoff.md",
     ".opencode\commands\resume.md",
+    ".opencode\skills\skill-template.md",
     "AGENTS.md",
     "opencode.jsonc"
 )

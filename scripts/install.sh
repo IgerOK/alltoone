@@ -55,6 +55,7 @@ fi
 for rel in ".opencode/plugins/context-budget" \
            ".opencode/commands/handoff.md" \
            ".opencode/commands/resume.md" \
+           ".opencode/skills/skill-template.md" \
            "AGENTS.md" \
            "opencode.jsonc"; do
   if [ -e "$target_path/$rel" ] && [ "$force" -eq 0 ]; then

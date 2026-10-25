@@ -937,6 +937,50 @@ class IntegrityTests(unittest.TestCase):
             self.assertEqual(result.written, ["a.txt"])
 
 
+class InstallTests(unittest.TestCase):
+    """The installers are the only path an outsider has to the workflow.
+
+    They ship the plugin, the commands and the agreement, so a file added to one
+    installer and not the other — or a path that no longer exists — quietly
+    breaks a fresh project while this repository stays green.
+    """
+
+    ROOT = Path(__file__).resolve().parents[1]
+
+    def _ps1(self) -> list[str]:
+        text = (self.ROOT / "scripts" / "install.ps1").read_text(encoding="utf-8")
+        start = text.index("$files = @(")
+        end = text.index(")", start)
+        return [path.replace("\\", "/") for path in re.findall(r'"([^"]+)"', text[start:end])]
+
+    def _sh(self) -> list[str]:
+        text = (self.ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+        start = text.index("for rel in")
+        end = text.index("; do", start)
+        return [path.replace("\\", "/") for path in re.findall(r'"([^"]+)"', text[start:end])]
+
+    def test_both_installers_ship_the_same_workflow(self):
+        self.assertEqual(self._ps1(), self._sh())
+
+    def test_every_shipped_path_exists(self):
+        shipped = self._sh()
+        self.assertTrue(shipped)
+        for rel in shipped:
+            self.assertTrue((self.ROOT / rel).exists(), rel)
+
+    def test_the_skill_template_travels_but_personal_skills_do_not(self):
+        shipped = self._sh()
+        self.assertIn(".opencode/skills/skill-template.md", shipped)
+        # A learned skill names this machine's paths and sessions as proof.
+        self.assertFalse([rel for rel in shipped if rel.endswith("SKILL.md")])
+
+    def test_the_agreement_names_every_shipped_file(self):
+        # The workflow is only usable if the rules and the copies agree.
+        agreement = (self.ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        for rel in (".opencode/skills/",):
+            self.assertIn(rel, agreement)
+
+
 class SkillsTests(unittest.TestCase):
     """A learned skill is cheap to write and expensive to trust.
 
