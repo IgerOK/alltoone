@@ -21,7 +21,7 @@ One file carries state, map and files, so a new chat continues without history; 
 
 ## Next
 1. Verified 2026-10-25: E2E pack→unpack byte-identical, handoff→unpack without `--format`, `--check` 0/1, install/uninstall smoke — all green.
-2. Release only on request: GitHub Release from tag `v0.5.6`. Live stats: cache hit 91% over 925 requests, pack read 19×.
+2. Released 2026-10-25: GitHub Release `v0.5.6` — https://github.com/IgerOK/alltoone/releases/tag/v0.5.6 (latest, notes from README + verification).
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
