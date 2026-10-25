@@ -145,6 +145,25 @@ check(
   [true, true],
 )
 
+// 86% of the window: the handoff mode. Its directive is the only text that
+// stops new work and rebuilds the pack, and no live session has ever reached
+// it — sessions end around 70% — so without this the branch ships unseen.
+const HANDOFF_USED = 172_000
+
+const handoff = await run(true, [NORMAL_USED, HANDOFF_USED, HANDOFF_USED], "ses_handoff")
+check("handoff mode reaches the model", handoff.tails[1].includes("mode=handoff"), true)
+check(
+  "handoff directive stops work and rebuilds the pack",
+  [
+    "Do not start new work",
+    "refresh `.opencode/handoff/files.txt`",
+    "open a new chat and run `/resume`",
+  ].every((text) => handoff.tails[1].includes(text)),
+  true,
+)
+check("the handoff directive is sent once, on the change", handoff.tails[2].includes("Do not start new work"), false)
+check("a handoff is not a compaction", handoff.compactions.length, 0)
+
 // autoResume: a pointer to the pack, once per session, only when the pack exists.
 const resumeOff = await run({ autoCompact: false, autoResume: false }, [NORMAL_USED], "ses_resume_off")
 check("autoResume=false adds no pointer", resumeOff.tails[0].includes("handoff pack"), false)

@@ -15,11 +15,11 @@ One file carries state, map and files, so a new chat continues without history; 
 - `scripts/usage.py`: read-only report — cache, pack reads, unread files, tool errors, skills; 4 tests.
 - `files.txt` = the 9 files the next step needs; `AGENTS.md` is injected, `README.md`/`cli.py`/`render.py`/`handoff.md` were never read. Pack 130 → 84 KB.
 - Memory in git: `pack.md`/`budget.log` are ignored; `--check` warns above 8 decisions (soft). Ideas from `IgerOK/allToOne-setup`.
-- Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
+- Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 32 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
 1. Nothing pending: v0.5.6 is final, released 2026-10-25 (https://github.com/IgerOK/alltoone/releases/tag/v0.5.6); E2E pack→unpack, `--check` 0/1, install/uninstall smoke — all green.
-2. On a new scope from the user, start from `## Files` below; keep 84 tests + 28 node checks green.
+2. On a new scope from the user, start from `## Files` below; keep 84 tests + 32 node checks green.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
@@ -54,7 +54,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - `AGENTS.md`: the agreement; `README.md`: user docs; `RELEASING.md`: release checklist; `scripts/install.ps1|sh`: what travels.
 
 ## Commands
-- `python -m unittest discover -s tests`: 84 tests; `node tests/plugin_budget_test.mjs`: 28 checks.
+- `python -m unittest discover -s tests`: 84 tests; `node tests/plugin_budget_test.mjs`: 32 checks.
 - `python scripts/usage.py`: cache, pack reads, unused packed files, tool errors, skills.
 - `python -m alltoone handoff --check` / `python -m alltoone handoff`.
 - `git add .opencode/handoff`: memory is tracked, so it is committed with the change.
