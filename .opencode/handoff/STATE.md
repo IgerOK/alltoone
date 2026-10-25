@@ -20,8 +20,8 @@ One file carries state, map and files, so a new chat continues without history; 
 - Release prep: MIT `LICENSE`+RU in UTF-8/LF (+byte test), installers, CI, README `## Версии` (one version, 0.5.6); 84 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
-1. No active task: 0.5.6 shipped, uninstall and the install-only snapshot are in place; license is UTF-8/LF.
-2. Push on request only: `git remote add origin https://github.com/IgerOK/alltoone`, then the `git archive` snapshot.
+1. Pushed 2026-10-25: `origin` = https://github.com/IgerOK/alltoone, branch `main`, tag `v0.5.6`; CI runs on every push.
+2. Next: watch the first CI run on GitHub; `git archive` snapshot only when a release zip is needed.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
@@ -35,8 +35,8 @@ One file carries state, map and files, so a new chat continues without history; 
 - A skill is earned, not invented: a repeated failure whose error text did not contain the answer;
   the description names the symptom, 12 skills max, tests hold it. No automatic writer: `shell`
   failures carry no error status, so the trigger stays in-session (user, 2026-10-25).
-- Working language: Russian; local git only, commit each change, no remote until asked; `STATE.md` and
-  `files.txt` are tracked, `pack.md`/`budget.log` are derived and ignored.
+- Working language: Russian; commit each change, push only when asked (`origin` added 2026-10-25); `STATE.md` and
+  `files.txt` are tracked and public, `pack.md`/`budget.log` are derived and ignored.
 - Plugin: options need the `plugins` entry (one instance); logic is tested through node, no TS toolchain, zero runtime deps.
 
 ## Open questions
