@@ -19,12 +19,11 @@ One file carries state, map and files, so a new chat continues without history; 
 - Memory is tracked: `.gitignore` ignores only `pack.md` and `budget.log`; `--check` warns above
   8 decisions (soft, exit 0). 2 tests. Ideas taken from `IgerOK/allToOne-setup`.
 - Release prep: MIT `LICENSE` + RU translation, `scripts/install.ps1|.sh`, CI ubuntu/windows
-  3.10/3.13, `.gitattributes`; 66 tests + 28 node checks. v0.5.5.
+  3.10/3.13, `.gitattributes`; 66 tests + 28 node checks. v0.5.6 shipped 2026-10-25.
 
 ## Next
-1. Ship 0.5.6: bump `pyproject.toml` + `alltoone/__init__.py`, `python -m alltoone handoff`, commit.
-2. Measure after the trim: `python scripts/usage.py` — pack reads should drop; a file needed from outside the pack goes into STATE.
-3. `agnes-3.0-flash` is unavailable now (user, 2026-10-24); revisit when it appears — tool calls first.
+1. Measure after the trim: `python scripts/usage.py` — pack reads should drop; a file needed from outside the pack goes into STATE.
+2. `agnes-3.0-flash` is unavailable now (user, 2026-10-24); revisit when it appears — tool calls first.
 
 ## Decisions
 - Meter outside the model: provider usage is truth, the model never counts.
@@ -47,7 +46,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - `tests/plugin_budget_test.mjs`: node harness; `tests/test_alltoone.py`: suite + wrapper.
 - `alltoone/handoff.py`: builder, `--check`; `alltoone/unpack.py`: restore.
 - `scripts/usage.py`: dev-only usage report; reads `opencode.db`, never writes it.
-- `pyproject.toml`, `alltoone/__init__.py`: version for the 0.5.6 bump; `opencode.jsonc`: plugin options.
+- `pyproject.toml`, `alltoone/__init__.py`: version (0.5.6); `opencode.jsonc`: plugin options.
 - `AGENTS.md`: the working agreement; `README.md`: user docs; `scripts/install.ps1|sh`: install.
 
 ## Commands
