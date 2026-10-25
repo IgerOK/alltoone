@@ -120,38 +120,84 @@ mkdir -p .github && cp AGENTS.md .github/copilot-instructions.md   # Copilot
 
 ## Установка
 
-Нужен только Python 3.10+ — зависимостей у пакета нет.
+Нужен только Python 3.10+ — зависимостей у пакета нет. Проект распространяется
+папкой: в PyPI его нет, готового пакета не скачать.
 
-Проект распространяется как папка: в PyPI его нет, готового пакета не скачать.
-Получив папку (архив или `git clone`), запусти установщик — он проверит Python и
-поставит пакет в режиме editable, так что обновление сводится к `git pull`:
+### Шаг 1. Проверить Python
+
+```powershell
+python --version
+```
+
+Ожидается `Python 3.10` или новее. Если открылся Microsoft Store или написано
+`python: command not found`, поставь Python с python.org и при установке отметь
+галочку **Add python.exe to PATH**, затем закрой и снова открой терминал. На Linux
+и macOS обычно есть `python3` — установщик умеет работать и с ним.
+
+### Шаг 2. Получить папку
+
+Скачай архив и распакуй его (или `git clone`). Папку лучше выбрать простую:
+`D:\tools\alltoone` или `~/tools/alltoone` — без пробелов и кириллицы в пути это
+избавляет от части сюрпризов. Все команды ниже выполняются **из этой папки**:
+`scripts\` лежит внутри неё.
+
+### Шаг 3. Запустить установщик
+
+Windows, PowerShell (в Проводнике: Shift + правый клик → «Открыть окно PowerShell
+здесь»):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+`-ExecutionPolicy Bypass` нужен, потому что Windows по умолчанию не запускает
+неподписанные скрипты. Разрешение действует только на этот запуск и ничего не
+меняет в системе; если политика уже разрешает скрипты, хватит
+`.\scripts\install.ps1`.
+
+Linux / macOS:
 
 ```bash
-# Windows
-.\scripts\install.ps1
-# Linux / macOS
+chmod +x ./scripts/install.sh
 ./scripts/install.sh
 ```
 
-Без установки тоже работает — прямо из папки проекта:
+`chmod` нужен, если архив распаковался без права на запуск; после `git clone` его
+можно пропустить.
+
+Что делает установщик: проверяет версию Python, ставит пакет в режиме editable
+(`python -m pip install -e .`) и печатает версию. Editable значит, что после
+`git pull` новый код подхватывается сам — переустанавливать не нужно. Вручную то
+же самое: `python -m pip install -e .`, а если системный Python недоступен для
+записи — `python -m pip install --user -e .`.
+
+### Шаг 4. Проверить
 
 ```bash
+alltoone --version    # alltoone 0.5.6
+```
+
+Если команда не находится, пакет всё равно работает — запускай его как модуль:
+
+```bash
+python -m alltoone --version
 python -m alltoone .            # упаковать текущую папку
 ```
 
-Либо поставить вручную:
+«Не находится» обычно значит, что каталог скриптов Python не попал в `PATH`;
+чинить это не обязательно, `python -m alltoone` равнозначен.
 
-```bash
-pip install -e .
-alltoone .
+### Шаг 5 (по желанию). Развернуть workflow в своём проекте
+
+Установка ставит только CLI. Плагин, команды `/handoff` и `/resume`, `AGENTS.md` и
+`opencode.jsonc` кладутся в конкретный проект отдельной командой; папка проекта
+должна уже существовать:
+
+```powershell
+.\scripts\install.ps1 -Target D:\work\my-project
 ```
 
-### Развернуть handoff-цикл в своём проекте
-
-Тем же скриптом, с указанием папки проекта:
-
 ```bash
-.\scripts\install.ps1 -Target D:\work\my-project
 ./scripts/install.sh --target ~/work/my-project
 ```
 
@@ -159,37 +205,110 @@ alltoone .
 `.opencode/skills/skill-template.md`, `AGENTS.md` и `opencode.jsonc`. Состояние
 (`.opencode/handoff/`) не копируется никогда — оно принадлежит конкретному проекту;
 заработанные навыки тоже остаются у себя, шаблон лишь показывает форму.
-Существующие файлы не перезаписываются без `-Force` / `--force`.
 
-Если в проекте уже есть `opencode.jsonc`, он не будет перезаписан: перенеси в него
-запись `plugins` с `autoResume` из поставляемого файла, иначе метр и указатель на
-пакет не включатся.
+Существующие файлы не перезаписываются: строка `skip ... (exists)` в выводе значит,
+что файл уже был и остался вашим. Заменить осознанно — `-Force` / `--force`.
 
+Если в проекте уже есть свой `opencode.jsonc`, он останется нетронутым, и метр
+контекста не включится: перенеси в него запись `plugins` с `autoResume` из
+поставляемого файла (см. «OpenCode как основной сценарий»). Дальше открой проект в
+OpenCode и работай как обычно: на 85% контекста — `/handoff`, потом новый чат и
+`/resume`.
+
+### Параметры установщика
+
+| Параметр | Смысл |
+| --- | --- |
+| `-Target DIR` / `--target DIR` | куда положить workflow (шаг 5) |
+| `-Force` / `--force` | перезаписать существующие файлы |
+| `-Python PATH` / `--python PATH` | каким Python ставить |
+| `-h` / `--help` | краткая справка (только `.sh`) |
+
+### Если что-то пошло не так
+
+| Что видно в консоли | Что делать |
+| --- | --- |
+| `python not found` | Python не установлен или не попал в `PATH` — шаг 1 |
+| `python 3.8 is too old` | Поставить 3.10+ и указать его: `-Python путь` / `--python путь` |
+| `pip install failed` | Системный Python недоступен для записи: `python -m venv .venv`, затем запустить установщик с `-Python .venv\Scripts\python.exe` (на Linux/macOS — `--python .venv/bin/python`) |
+| `running scripts is disabled` | Запустить через `powershell -ExecutionPolicy Bypass -File ...` |
+| `Permission denied` (Linux/macOS) | `chmod +x ./scripts/install.sh` |
+| `target is the repository itself` | `-Target` указывает на саму папку alltoone; нужен другой проект |
+| `not a directory` | Папки проекта ещё нет — создать и повторить |
+
+Повторный запуск установщика безопасен: он не перезаписывает то, что уже лежит.
 
 ## Удаление
 
 Установщик оставляет ровно известный набор файлов, поэтому удаление — точное, а не
-«снести папку целиком»:
+«снести папку целиком». Запускается из той же папки alltoone: скрипт удаления лежит
+в ней, поэтому сначала удаление, а папку репозитория удаляют уже после.
+
+### Только пакет
 
 ```powershell
-# Windows: только пакет
 .\scripts\uninstall.ps1
-# Windows: плюс workflow из проекта
+```
+
+```bash
+./scripts/uninstall.sh
+```
+
+Убирает `alltoone` из Python и больше ничего не трогает.
+
+### Пакет и workflow в проекте
+
+```powershell
 .\scripts\uninstall.ps1 -Target D:\work\my-project
-# Windows: плюс состояние и пакет (.opencode/handoff)
+```
+
+```bash
+./scripts/uninstall.sh --target ~/work/my-project
+```
+
+Убирает из проекта поставленные файлы (тот же список, что при установке) и затем сам
+пакет. Если CLI нужен дальше — `-KeepPackage` / `--keep-package`: тогда пакет
+останется, а проект очистится.
+
+### Совсем чисто, вместе с историей передачи
+
+```powershell
 .\scripts\uninstall.ps1 -Target D:\work\my-project -Purge
 ```
 
 ```bash
-./scripts/uninstall.sh --target ~/work/my-project          # без состояния
-./scripts/uninstall.sh --target ~/work/my-project --purge   # и состояние тоже
+./scripts/uninstall.sh --target ~/work/my-project --purge
 ```
 
-Что важно: файл, который вы правили после установки (`AGENTS.md`, `opencode.jsonc`),
-**не удаляется** — скрипт видит, что он отличается от поставляемого, и оставляет его
-(удалить принудительно: `-Force` / `--force`). Личные навыки в `.opencode/skills/`
-тоже остаются; `--purge` дополнительно убирает `.opencode/handoff/` — историю
-передачи, которую вы, возможно, хотите сохранить. Код проекта не трогается никогда.
+`-Purge` / `--purge` дополнительно удаляет `.opencode/handoff/`, если он есть:
+`STATE.md`, `files.txt` и собранные пакеты. Без него всё, что там было, остаётся —
+это история работы, и молча её стирать нельзя.
+
+### Что скрипт не удаляет
+
+- **Изменённые файлы.** Если `AGENTS.md` или `opencode.jsonc` правились после
+  установки, скрипт печатает `kept ... (changed since install)` и оставляет файл:
+  удалить чужую правку молча — потеря данных. Удалить принудительно — `-Force` /
+  `--force`.
+- **Заработанные навыки** в `.opencode/skills/`: они написаны для проекта, а не
+  поставлены; удаляется только опустевшая папка.
+- **Файлы проекта** — код, документация, настройки: их скрипт не касается никогда.
+- **Каталоги** `.opencode/plugins`, `.opencode/commands`, `.opencode` — только если
+  опустели; чужое содержимое остаётся на месте.
+- **Саму папку alltoone** — удали вручную, когда скрипт отработал.
+
+После удаления в проекте не должно остаться `.opencode/plugins/context-budget`,
+`.opencode/commands/handoff.md`, `.opencode/commands/resume.md` и `AGENTS.md` — если
+вы их не правили. Навыки, состояние без `--purge` и ваши правки — останутся, так и
+задумано.
+
+| Параметр | Смысл |
+| --- | --- |
+| `-Target DIR` / `--target DIR` | какой проект чистить |
+| `-Purge` / `--purge` | ещё и `.opencode/handoff/` |
+| `-KeepPackage` / `--keep-package` | не удалять пакет alltoone |
+| `-Force` / `--force` | удалить и изменённые файлы |
+| `-Python PATH` / `--python PATH` | каким Python удалять пакет |
 
 ## Быстрый старт
 

@@ -12,7 +12,7 @@ One file carries state, map and files, so a new chat continues without history; 
 - Skills are earned: `.opencode/skills/powershell-native-stderr/` (first, verified) + `skill-template.md`,
   `alltoone/skills.py` checks the format, `usage.py` lists repeated tool errors as candidates.
 - Outsider path: installers ship the skill template (parity test), README covers skills, non-OpenCode use
-  and uninstall; `RELEASING.md` = release + install-only snapshot; nothing is published yet.
+  and uninstall step-by-step (Python+PATH, ExecutionPolicy, chmod, `-Target`, error table); `RELEASING.md` = release; nothing published.
 - Uninstall (`scripts/uninstall.ps1|sh`): removes exactly the installed set, keeps files changed since install, `-Force`/`--purge`.
 - `scripts/usage.py`: read-only report — cache, pack reads, unread files, tool errors, skills; 4 tests.
 - `files.txt` = the 9 files the next step needs; `AGENTS.md` is injected, `README.md`/`cli.py`/`render.py`/`handoff.md` were never read. Pack 130 → 84 KB.
