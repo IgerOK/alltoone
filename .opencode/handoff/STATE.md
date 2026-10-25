@@ -4,13 +4,11 @@
 One file carries state, map and files, so a new chat continues without history; plus metering in OpenCode.
 
 ## Done
-- `alltoone handoff` (`alltoone/handoff.py`): state + full tree + selected files in one Markdown file.
-  `--check` validates schema, 60-line limit, every path and the skill catalog; exit 1, writes nothing.
+- `alltoone handoff` (`alltoone/handoff.py`): state + full tree + selected files in one Markdown file; `--check` validates schema, 60-line limit, every path and the skill catalog; exit 1, writes nothing.
 - `unpack` detects a handoff pack without `--format` and parses only the body after `# Project context:`.
 - `.opencode/plugins/context-budget/index.ts`: `[budget]` in the tail from provider usage, `compact` only at `critical` with `autoCompact`, transitions in `budget.log`.
 - `autoResume` on: one pointer per session naming the pack size and asking for the rest of a truncated read; cache 93–99% after request 4 (live 2026-10-24).
-- Skills are earned: `.opencode/skills/powershell-native-stderr/` (first, verified) + `skill-template.md`,
-  `alltoone/skills.py` checks the format, `usage.py` lists repeated tool errors as candidates.
+- Skills are earned: `.opencode/skills/powershell-native-stderr/` (first, verified) + `skill-template.md`; `alltoone/skills.py` checks the format, `usage.py` lists candidates.
 - Outsider path: installers ship the skill template (parity test), README covers skills, non-OpenCode use
   and uninstall step-by-step, plus manual copy by hand/Explorer (Python+PATH, ExecutionPolicy, chmod, `-Target`, error table); `RELEASING.md` = release; nothing published.
 - Uninstall (`scripts/uninstall.ps1|sh`): removes exactly the installed set, keeps files changed since install, `-Force`/`--purge`.
@@ -42,7 +40,9 @@ One file carries state, map and files, so a new chat continues without history; 
 ## Open questions
 - Parked, do not raise: `agnes-3.0-flash` — the user drops it until they can use it (2026-10-25).
 - Does `input` exclude cached tokens for every provider? Here yes; `max()` is a safe guess, not a rule.
-- Plugin API is V2; a desktop update may break `session.hook("context")`.
+- Plugin API V2 may break on a desktop update. Verified 2026-10-25 on 2.1.4: meter == provider usage (`61k` vs 61 249),
+  `model.list()` limits reach the line (`reserve 36k`), `ctx.options` read, resume pointer written, no plugin errors in
+  `~/.local/share/opencode/log/opencode.log`; `session.compact` unexercised live (`autoCompact` off); request 1 under-reports (~200 tokens).
 
 ## Files
 - `.opencode/plugins/context-budget/index.ts`: meter, guard, resume pointer.
